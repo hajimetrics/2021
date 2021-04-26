@@ -1,0 +1,412 @@
+---
+title: "Bayesian Statistics from Scratch"
+author: "Sihan Wang"
+date: "2021/4/30"
+output:
+  html_document:
+    df_print: paged
+---
+
+## (復習)ベイズ統計学
+>馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 第1部第6章6. 10節 <br>
+
+前回, 前々回でベイズについて一通り勉強しました. 
+最後に1つ, データをもとに"確率変数"$\theta$の事後分布$f(\theta|D)$を求めるベイズの計算例をやります. 
+この例は後のMCMCでも使います. まずは復習がてら計算機に頼らず手でやってみましょう. <br>
+
+### ベイズ統計モデリング
+
+以下の売り上げデータ$D$が与えられているとします. 確率変数$X$から実現値$\{x_1,  x_2,  x_3,  x_4,  x_5\}$が出て, これをまとめて$D$とします.
+
+$$
+D=\{x_1=2. 4,  x_2=3. 2,  x_3=2. 2,  x_4=4. 6,  x_5=3. 3\}
+$$
+
+このデータを出した確率変数$X$は以下の平均$\theta$, 分散$1^2$の正規分布に従うと仮定してみます. 
+
+$$
+X \sim \rm Normal(\theta,  1^2)
+$$
+
+この正規分布のパラメータ$\theta$, つまり分布の平均を推定することが今回の目的となります. 
+今, データ$D$が手元にあり, $\theta$はどんな値をとるかわからない"確率変数"として扱っているので, この確率分布は尤度としてみます. 
+確率変数$X$が従う正規分布の確率密度関数$f(x)$は, 
+
+$$\begin{eqnarray}
+f(x) &=& \frac {1} {\sqrt{2 \pi \times 1^2}} \exp \left(-\frac {(x-\overset{パラメータ}\theta)^ 2} {2 \times 1^2} \right) \\
+&=& \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x-\theta)^ 2} {2} \right)
+\end{eqnarray}$$
+
+です. パラメータ$\theta$がある値をとるときにデータ$D$が得られる尤度関数$f(D|\theta)$は, 以下の通りです. 
+
+$$\begin{eqnarray}
+f(D|\theta) &=& f(x_1=2. 4|\theta)f(x_2=3. 2|\theta)f(x_3=2. 2|\theta)f(x_4=4. 6|\theta)f(x_5=3. 3|\theta) \\
+&=& \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(2. 4-\theta)^ 2} {2} \right) \times 
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(3. 2-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(2. 2-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(4. 6-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(3. 3-\theta)^ 2} {2} \right) \\
+&=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right)
+\end{eqnarray}$$
+
+次に事前分布のセッティングをします. $\theta$の事前分布は平均$1$, 分散$100^2$の正規分布を想定します. 
+
+$$
+\theta \sim \rm Normal(0,  100^2)
+$$
+
+事前分布の確率密度関数$f(\theta)$は, 
+
+$$\begin{eqnarray}
+f(\theta) &=& \frac {1} {\sqrt{2 \pi \times 100^2}} \exp \left(-\frac {(\overset{確率変数}\theta-0)^ 2} {2 \times 100^2} \right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)
+\end{eqnarray}$$
+
+です. ここでは$f(\theta)$は$\rm Normal(0,  10000)$のパラメータではなく, $\rm Normal(0,  10000)$に従う"確率変数"になっていることに注意してください. 
+
+ここまでの状況を整理しておきましょう. 
+
+---
+
+わかっていること
+
+ * 尤度: $f(D|\theta)=\prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right)$
+ * $\theta$の事前確率密度関数: $f(\theta)=\frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)$
+
+求めたいこと
+
+ * $\theta$の事後確率密度関数: $f(\theta|D) = {?}$
+ 
+---
+
+ここでベイズの定理を使って, わからない事後分布の確率密度関数$f(\theta|D)$を, わかっている尤度$f(D|\theta)$と事前分布の確率密度関数$f(\theta)$で表現します. 一見ベイズの定理の中で唯一わからなさそうな${f(D)}$も, 周辺化すればわかっているものだけで表現できます. 
+
+$$\begin{eqnarray}
+\overbrace{f(\theta|D)}^{\text{事後分布}} &=& \frac {\overbrace{f(D|\theta)}^{\text{尤度}} \overbrace{f(\theta)}^{\text{事前分布}} } {f(D)} \\
+&=& \frac {f(D|\theta)f(\theta)} {\int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta}
+\end{eqnarray}$$
+
+これで事後分布の正体がわかりました. あとは$\theta$の事後分布のグラフ・形を描くために数式をはっきりさせます. 
+
+### 事後分布のカーネル
+
+ちなみに, ベイズの定理
+
+$$\begin{eqnarray}
+f(\theta|D) &=& \frac {f(D|\theta)f(\theta)} {f(D)}
+\end{eqnarray}$$
+
+の式をよく見ると, $\theta$が入っている($\theta$を吟味するうえで大事な)部分
+
+$$
+f(D|\theta)f(\theta)
+$$
+
+と入っていない(どうでもいい)部分
+
+$$
+f(D)
+$$
+
+に分解できることに気づくと思います. $\theta$を含む$f(D|\theta)f(\theta)$を**カーネル**と呼び, カーネルは$\theta$の関数なので$\rm Kernel(\theta)$と表記しておきます. 一方, $\theta$を含まない$f(D)$は**正規化定数**(**係数**)といい, 事後確率$f(D|\theta)$の合計$\int_\theta f(D|\theta) d\theta$が$1$となるように調節してくれます. 
+
+$\theta$の事後分布を吟味する際, $\theta$を含まない正規化定数はそこまで重要じゃないので, ベイズの定理をざっくり比例の関係でみることもできます. (事後分布の確率密度関数の式をきっちり求める際にはもちろん正規化定数が必要です. )
+
+$$
+f(\theta|D) \propto f(D|\theta)f(\theta)
+$$
+
+### 事後分布の手計算
+
+$\theta$事後分布を手で計算してプロットしてみます。適当に流れを追ってみてください。
+
+まず尤度$f(D|\theta)$の式をきれいにしてプロットします。
+
+$$\begin{eqnarray}
+f(D|\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \\
+&=& \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_1-\theta)^ 2} {2} \right) \times 
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_2-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_3-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_4-\theta)^ 2} {2} \right) \times
+\frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_5-\theta)^ 2} {2} \right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( -\frac {(x_1-\theta)^ 2} {2} 
+-\frac {(x_2-\theta)^ 2} {2} 
+-\frac {(x_3-\theta)^ 2} {2} 
+-\frac {(x_4-\theta)^ 2} {2} 
+-\frac {(x_5-\theta)^ 2} {2} 
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \{(x_1-\theta)^ 2 + (x_2-\theta)^ 2 + (x_3-\theta)^ 2 + (x_4-\theta)^ 2 + (x_5-\theta)^ 2\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \{ 5\theta^2 -2(x_1 + x_2 + x_3 + x_4 + x_5)\theta + (x_1^2 + x_2^2 + x_3^2 + x_4^2 + x_5^2)\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \left[ 5 \left\{ \theta -2 \underbrace{ \frac {1} {5} (x_1 + x_2 + x_3 + x_4 + x_5) }_{\text{標本平均}\bar{x}} \theta \right\} + (x_1^2 + x_2^2 + x_3^2 + x_4^2 + x_5^2) \right]
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \left\{ 5 ( \theta -2 \bar{x} \theta ) + (x_1^2 + x_2^2 + x_3^2 + x_4^2 + x_5^2) \right\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \left\{ 5 ( \theta -\bar{x})^2 - 5 \bar{x}^2 + 5 \bar{x^2}  \right\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \left\{ 5 ( \theta -\bar{x})^2 + 5 \underbrace{ (\bar{x^2} - \bar{x}^2) }_{\text{標本分散}S^2} \right\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 \exp \left( 
+-\frac {1} {2} \left\{ 5 (\theta -\bar{x})^2 + 5 S^2 \right\}
+\right) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {5 ( \theta - \bar{x})^2} {2} \right) \\
+&=& \underbrace{ \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 \times 0.898^2} {2} \right) }_{定数} 
+\exp \left( -\frac {5 ( \theta - 3.14)^2} {2} \right)
+\end{eqnarray}$$
+
+```{r,  analyticalal solution likelihood plot}
+# calculate sample meand and variance
+d <- c(2.4,3.2,2.2,4.6,3.3)
+x_bar <-  mean(d) # sample mean
+s_square <-  var(d) # sample variance
+cat("sample mean:", x_bar, ", sample variance:", s_square)
+
+# ANALYTICAL SOLUTION plot likelihood function
+likelihood <- function(theta) {
+  return ((1 / sqrt(2*pi))^5 * exp(- 5 * s_square^2 / 2) * exp(- 5 * (theta - x_bar)^2 / 2))
+}
+
+grid <-  seq(-10,10,0.01)
+plot(grid, likelihood(grid),
+     main="Likelihood Function",
+     xlab="theta",
+     ylab="likelihood(theta): f(D | theta)")
+
+# プロットするだけなら別に式きれいにしなくてもそのまま総乗の尤度でいい
+likelihood_prod <- function(theta) {
+  prod <-  1
+  for (i in 1:5) {
+    prod <- prod * (1 / sqrt(2*pi)) * exp(-(d[i] - theta)^2 / 2)
+  }
+  return (prod)
+}
+
+grid <-  seq(-10,10,0.01)
+plot(grid, likelihood(grid),
+     main="Likelihood Function (そのまま)",
+     xlab="theta",
+     ylab="likelihood(theta): f(D | theta)")
+```
+
+Note: 当たり前ですが尤度を最大にする$\theta$は最尤推定量$\hat{\theta}^{\rm likelihood}=\bar{x}$であり、$3.14$です。
+
+```{r maximum likelihood}
+# the value of theta which maximizes likelihood function
+grid[which.max(likelihood(grid))]
+
+```
+
+次に事前分布$f(\theta)$の式をプロットしてみます。
+
+$$\begin{eqnarray}
+f(\theta)=\frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)
+\end{eqnarray}$$
+
+```{r,  analyticalal solution prior plot}
+# ANALYTICAL SOLUTION plot prior probability density function
+prior <- function(theta) {
+  return ((1 / sqrt(20000*pi))^5 * exp(-(theta^2 / 20000)))
+}
+
+grid <-  seq(-10,10,0.01)
+plot(grid, prior(grid),
+     main="Prior PDF",
+     xlab="theta",
+     ylab="Prior Probability Density(theta): f(theta)")
+```
+
+尤度と事前分布を掛け合わせたカーネル$f(D|\theta)f(\theta)$の式をきれいにしてプロットしてみます。
+
+$$\begin{eqnarray}
+f(D|\theta)f(\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \frac {1} {\sqrt{20000 \pi}} \exp(-\frac {\theta^ 2} {20000}) \\
+&=& \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {5 (\theta - \bar{x})^2} {2} \right)
+\frac {1} {\sqrt{20000 \pi}} 
+\exp \left(-\frac {\theta^ 2} {20000} \right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {5 (\theta - \bar{x})^2} {2} \right)
+\exp \left(-\frac {\theta^ 2} {20000} \right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {5 (\theta - \bar{x})^2} {2} -\frac {\theta^ 2} {20000} \right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {10000 \times 5 (\theta - \bar{x})^2 + \theta^2} {20000}\right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( -\frac {50001 \theta^2 - 2\times5\times10000 \bar{x} \theta + 50000 \bar{x}^2} {20000}\right) \\
+&=& \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 S^2} {2} \right)
+\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\bar{x}} {50001} \right)^2 - \frac {5(0 - \bar{x}^2)} {2\times50001} \right) \\
+&=& \underbrace{ \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right) }_{定数}
+\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \\
+\end{eqnarray}$$
+
+```{r,  analyticalal solution kernel plot}
+# ANALYTICAL SOLUTION plot kernel function
+kernel <- function(theta) {
+  return (  (1 / sqrt(20000 * pi)) *
+            (1 / sqrt(2 * pi)) ^ 5 * 
+            exp(-(5 * s_square) / 2) * 
+            exp(-(5 * -x_bar^2) / (2 * 50001)) * 
+            exp(-(50001 / 20000) * (theta - ((50000 * x_bar) / 50001)) ^ 2)  
+          )
+}
+
+grid <-  seq(-10,10,0.01)
+plot(grid, kernel(grid),
+     main="Kernel",
+     xlab="theta",
+     ylab="Kernel(theta): f(D | theta)f(theta)")
+
+# プロットするだけならlikelihood * priorのままでいい
+likelihood_times_prior <- function(theta) {
+  return (likelihood(theta)*prior(theta))
+}
+
+grid <-  seq(-10,10,0.01)
+plot(grid, likelihood_times_prior(grid),
+     main="Kernel = Likelihood * Prior",
+     xlab="theta",
+     ylab="Kernel(theta): f(D | theta)f(theta)")
+
+# check argmax theta
+grid[which.max(kernel(grid))]
+grid[which.max(likelihood_times_prior(grid))]
+```
+
+正規化定数$f(D)$の値を計算すると
+
+$$\begin{eqnarray}
+f(D) &=& \int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta \\
+&=& \int_{-\infty}^{\infty} \left[ \underbrace{ \frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right) }_{定数}
+\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \right] d\theta \\
+&=& \frac {1} {\sqrt{20000 \pi}}
+\left( \frac {1} {\sqrt{2\pi}} \right)^5
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+\int_{-\infty}^{\infty} \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) d\theta \\
+&=& \underbrace{ \frac {1} {\sqrt{20000 \pi}}
+\left( \frac {1} {\sqrt{2\pi}} \right)^5
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}} }_{定数} \\
+\end{eqnarray}$$
+
+```{r}
+# ANALYTICAL SOLUTION calculate normalizing constant
+constant <- (1 / sqrt(20000 * pi)) *
+            (1 / sqrt(2 * pi)) ^ 5 * 
+            exp(-(5 * s_square) / 2) * 
+            exp(-(5 * -x_bar^2) / (2 * 50001)) *
+            sqrt(pi / (50001/20000))
+
+print(constant)
+```
+
+最後にベイズの式に上全てを代入して事後分布の式をきれいにしてプロットすると、
+
+$$\begin{eqnarray}
+f(\theta|D) &=& \frac {f(D|\theta)f(D)} {f(D)} \\
+&=& \frac 
+{\frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right)
+} 
+{\frac {1} {\sqrt{20000 \pi}}
+\left( \frac {1} {\sqrt{2\pi}} \right)^5
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
+} \\
+&=& \frac 
+{\frac {1} {\sqrt{20000 \pi}} 
+\left( \frac {1} {\sqrt{2\pi}} \right)^5 
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+} 
+{\frac {1} {\sqrt{20000 \pi}}
+\left( \frac {1} {\sqrt{2\pi}} \right)^5
+\exp \left( -\frac {5 \times 0.898} {2} \right) 
+\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
+} \exp \left( - \frac {\left( \overset{確率変数} \theta - \frac {50000\times3.14} {50001} \right)^2} {2 \frac {10000} {50001}}  \right)
+\end{eqnarray}$$
+
+```{r,  analyticalal solution posterior plot}
+# ANALYTICAL SOLUTION plot posterior probabolity density function
+posterior <- function(theta) {
+  return (
+    ((1 / sqrt(20000 * pi)) *
+    (1 / sqrt(2 * pi)) ^ 5 * 
+    exp(-(5 * s_square) / 2) * 
+    exp(-(5 * -x_bar^2) / (2 * 50001)) / constant) *
+    exp(-(theta - (50000 * x_bar) / 50001)^2 / (2 * (10000 / 500001)))
+  )
+}
+
+
+grid <-  seq(-10,10,0.01)
+plot(grid, posterior(grid),
+     main="Posterior PDF",
+     xlab="theta",
+     ylab="Prior Probability Density(theta): f(theta | D)")
+
+# plot likelihood, prior, kernel, and posterior
+# priorがかなり弱いので、posteriorはほとんど変化しない。
+library(ggplot2)
+
+df <- data.frame('theta' = grid,
+                 'likelihood' = likelihood(grid),
+                 'prior' = prior(grid),
+                 'kernel' = kernel(grid),
+                 'posterior' = posterior(grid)
+                 )
+
+ggplot(df, aes(theta, y = density, color = func)) + 
+    geom_point(aes(y = likelihood, col = "likelihood"), alpha = 0.5) + 
+    geom_point(aes(y = prior, col = "prior"), alpha = 0.5) +
+    geom_point(aes(y = kernel, col = "kernel"), alpha = 0.5) +
+    geom_point(aes(y = posterior, col = "posterior"), alpha = 0.5)
+
+ggplot(df, aes(theta, y = density, color = func)) + 
+    geom_point(aes(y = likelihood, col = "likelihood"), alpha = 0.5) + 
+    geom_point(aes(y = prior, col = "prior"), alpha = 0.5) +
+    geom_point(aes(y = kernel, col = "kernel"), alpha = 0.5)# +
+    #geom_point(aes(y = posterior, col = "posterior"), alpha = 0.5)
+
+# check argmax theta
+grid[which.max(posterior(grid))]
+```
+
+ここまでかなり大変だったと思いますが、これは知っている分布、$正規分布 \times 正規分布 \rightarrow 正規分布$の計算でこれでもかなり簡単な方です。知らない分布、むずかしい分布だと手計算では難しくなります。そこでMCMCを導入します。
+
+
+参考:<br>
+正規分布の事後分布の平均と分散 https://ai-trend.jp/basic-study/bayes/bayes-normal-distribution/ <br>
+ガウス積分と正規分布 https://www.momoyama-usagi.com/entry/math/analysis26
