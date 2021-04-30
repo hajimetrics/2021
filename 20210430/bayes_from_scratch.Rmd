@@ -7,12 +7,37 @@ output:
     df_print: paged
 ---
 
-## (復習)ベイズ統計学
+```{r setup, include=FALSE}
+```
+
+目次
+
+* [1.ベイズ統計学(復習)](#anchor1)
+  * ベイズ統計モデリング
+  * 事後分布のカーネル
+* [2.MCMC](#anchor2)
+  * モンテカルロ法
+  * マルコフ連鎖
+  * メトロポリス・ヘイスティングス法(MH法)
+  * 乱数の取り扱い
+  * RStanの実行
+  * ハミルトニアン・モンテカルロ法(HMC法) *on hold*
+* [3.手計算](#anchor3)
+  * 尤度関数の整理
+  * 事前確率密度関数の整理
+  * カーネル関数の整理
+  * 正規化定数の整理
+  * 事後確率密度関数の導出
+  
+
+<a id="anchor1"></a>
+
+## 1.ベイズ統計学(復習)
 >馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 第1部第6章6. 10節 <br>
 
 前回, 前々回でベイズについて一通り勉強しました. 
-最後に1つ, データをもとに"確率変数"$\theta$の事後分布$f(\theta|D)$を求めるベイズの計算例をやります. 
-この例は後のMCMCでも使います. まずは復習がてら計算機に頼らず手でやってみましょう. <br>
+今回は今まで勉強したことを踏まえて, データをもとに"確率変数"$\theta$の事後分布$f(\theta|D)$を求めるベイズの計算例をやります. 
+この例は後のMCMCでも使います. まずは復習も兼ねてベイズのセッティングをしましょう. <br>
 
 ### ベイズ統計モデリング
 
@@ -49,7 +74,7 @@ f(D|\theta) &=& f(x_1=2. 4|\theta)f(x_2=3. 2|\theta)f(x_3=2. 2|\theta)f(x_4=4. 6
 &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right)
 \end{eqnarray}$$
 
-次に事前分布のセッティングをします. $\theta$の事前分布は平均$1$, 分散$100^2$の正規分布を想定します. 
+次に事前分布のセッティングをします. $\theta$の事前分布はなるべく情報のない平均$0$, 分散$100^2$の正規分布を想定します. 
 
 $$
 \theta \sim \rm Normal(0,  100^2)
@@ -62,7 +87,7 @@ f(\theta) &=& \frac {1} {\sqrt{2 \pi \times 100^2}} \exp \left(-\frac {(\overset
 &=& \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)
 \end{eqnarray}$$
 
-です. ここでは$f(\theta)$は$\rm Normal(0,  10000)$のパラメータではなく, $\rm Normal(0,  10000)$に従う"確率変数"になっていることに注意してください. 
+です. ここでは$\theta$は$\rm Normal(0,  10000)$のパラメータではなく, $\rm Normal(0,  10000)$に従う"確率変数"になっていることに注意してください. 
 
 ここまでの状況を整理しておきましょう. 
 
@@ -70,7 +95,7 @@ f(\theta) &=& \frac {1} {\sqrt{2 \pi \times 100^2}} \exp \left(-\frac {(\overset
 
 わかっていること
 
- * 尤度: $f(D|\theta)=\prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right)$
+ * 尤度関数: $f(D|\theta)=\prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right)$
  * $\theta$の事前確率密度関数: $f(\theta)=\frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)$
 
 求めたいこと
@@ -86,7 +111,29 @@ $$\begin{eqnarray}
 &=& \frac {f(D|\theta)f(\theta)} {\int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta}
 \end{eqnarray}$$
 
-これで事後分布の正体がわかりました. あとは$\theta$の事後分布のグラフ・形を描くために数式をはっきりさせます. 
+これで事後分布の正体がわかりました. $\theta$の分布についてなんでもできます.  
+例えば, $\theta$の期待値を報告したいとき, 期待値は以下のように計算できます. 
+
+<a id="anchor4"></a>
+
+$$\begin{eqnarray}
+E \left[ \theta \right] &=& \int_{-\infty}^{\infty} f(\theta|D)\theta d\theta \\
+&=& \int_{-\infty}^{\infty} \frac {f(D|\theta)f(\theta)} {f(D)} \theta d\theta \\
+&=& \int_{-\infty}^{\infty} \frac {f(D|\theta)f(\theta)} {\int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta} \theta d\theta \\
+&=& \int_{-\infty}^{\infty} \frac 
+{\left[ \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \right] 
+\cdot \left[ \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right) \right]}
+{\int_{-\infty}^{\infty} 
+\left[ \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \right] 
+\cdot \left[ \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right) \right] d\theta} 
+\theta d\theta
+\end{eqnarray}$$
+
+...計算できますって言われてもどうやって計算すればいいでしょうか? <br>
+2つの方法があります. 
+
+* [手計算で頑張る. ](#anchor3)
+* [MCMCで近似的に計算する. ](#anchor2)
 
 ### 事後分布のカーネル
 
@@ -96,13 +143,13 @@ $$\begin{eqnarray}
 f(\theta|D) &=& \frac {f(D|\theta)f(\theta)} {f(D)}
 \end{eqnarray}$$
 
-の式をよく見ると, $\theta$が入っている($\theta$を吟味するうえで大事な)部分
+の式をよく見ると, $\theta$が入っている($\theta$を吟味するうえで大事な)分子の部分
 
 $$
 f(D|\theta)f(\theta)
 $$
 
-と入っていない(どうでもいい)部分
+と入っていない(どうでもいい)分母の部分
 
 $$
 f(D)
@@ -113,14 +160,545 @@ $$
 $\theta$の事後分布を吟味する際, $\theta$を含まない正規化定数はそこまで重要じゃないので, ベイズの定理をざっくり比例の関係でみることもできます. (事後分布の確率密度関数の式をきっちり求める際にはもちろん正規化定数が必要です. )
 
 $$
-f(\theta|D) \propto f(D|\theta)f(\theta)
+f(\theta|D) \propto f(D|\theta)f(\theta) = \left[ \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \right] 
+\cdot \left[ \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right) \right]
 $$
 
-### 事後分布の手計算
+<a id="anchor2"></a>
 
-$\theta$事後分布を手で計算してプロットしてみます。適当に流れを追ってみてください。
+## 2.MCMC
+> 馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 第1部第7章
 
-まず尤度$f(D|\theta)$の式をきれいにしてプロットします。
+**マルコフ連鎖モンテカルロ**(Markov Chain Monte Carlo: **MCMC**)**法**です. 
+
+### モンテカルロ法
+
+コンピュータ上に乱数をたくさん作りだして, その乱数を使って何かしら分析する方法です. 
+例えば, $\theta$の期待値$E\left[ \theta \right] = \int_{-\infty}^{\infty} f(\theta|D)\theta d\theta$を求めるとき, 手計算で連続分布の期待値をきっちり計算すると大変ですが, $\theta$の事後分布$f(\theta|D)$に従う乱数$\theta^{\rm rand}$(ある意味$\theta$の疑似実現値)を発生させて有限$N$個の乱数の平均を求めると, 比較的簡単にこの期待値を近似的に計算できます. (モンテカルロ積分)
+
+$$
+\theta_j^{\rm rand} \sim f(\theta|D) \\
+E\left[ \theta \right] = \int_{-\infty}^{\infty} \underbrace{ f(\theta|D) }_{\thetaの確率(密度)} \overbrace{\theta}^{\thetaの値} d\theta
+\simeq \frac {1} {N} \sum_{j=1}^{N} \underbrace{ \theta_j^{\rm rand} }_{f(\theta|D)から発生させた乱数}
+$$
+
+よって, ここでの目的は「確率変数$\theta$の事後分布$f(\theta|D)$に従う乱数$\theta_j^{\rm rand}$を発生させること」です. これさえできればあとは乱数の平均を計算したら$\theta$の期待値$\int_{-\infty}^{\infty} f(\theta|D)\theta d\theta$の近似値はすぐ求まります. 
+
+### マルコフ連鎖
+
+とりあえず, 「ある時点の値は, 1時点前の値だけに依存するような状態」とだけ理解していればいいと思います. マルコフ連鎖を式で表すと意味の通り以下のようになります. 
+
+$$
+P(X_t|X_{t-1}, X_{t-2}, ...,X_1) = P(X_t|X_{t-1})
+$$
+
+Note:「マルコフ連鎖が定常分布に収束する --> 定常分布に従う乱数を得られる」
+「定常分布が事後分布になる --> 乱数発生させてモンテカルロ積分ができる」
+ポイント: いかに事後分布に収束するようなマルコフ連鎖の遷移核(遷移行列)を設定するか...詳細釣り合い条件
+
+### メトロポリス・ヘイスティングス法(MH法)
+
+まずは1.でモデリングした尤度関数$f(D|\theta)$, $\theta$の事前確率密度関数$f(\theta)$, カーネル関数$\rm Kernel(\theta)$をコードに書き出しておきましょう. あとで使います. 
+
+```{r preparation}
+# data
+d <- c(2.4,3.2,2.2,4.6,3.3)
+
+# likelihood function
+likelihood <- function(theta) {
+  l <-  1
+  for (i in d) {
+    l <- l * (1 / sqrt(2*pi)) * exp(-(i - theta)^2 / 2)
+  }
+  return (l)
+}
+
+# prior probability density function
+prior <- function(theta) {
+  return ( (1 / sqrt(20000*pi))^5 * exp(-(theta^2 / 20000)) )
+}
+
+# kernel function (simply likelihood * prior)
+kernel <- function(theta) {
+  return ( likelihood(theta) * prior(theta) )
+}
+```
+
+```{r grid-plot}
+# plot each function based on theta grid
+library(ggplot2)
+
+theta_grid <-  seq(-10,10,0.01)
+
+df <- data.frame('theta' = theta_grid,
+                 'likelihood' = likelihood(theta_grid),
+                 'prior' = prior(theta_grid),
+                 'kernel' = kernel(theta_grid)
+                 )
+
+ggplot(df, aes(theta, y = likelihood, color = func)) + 
+    geom_point(aes(y = likelihood, col = "likelihood"), alpha = 0.1) +
+    ggtitle("Likelihood Function")
+
+ggplot(df, aes(theta, y = density, color = func)) + 
+    geom_point(aes(y = prior, col = "prior"), alpha = 0.1) + 
+    ggtitle("Prior Probability Density Function")
+
+ggplot(df, aes(theta, y = kernel, color = func)) + 
+    geom_point(aes(y = kernel, col = "kernel"), alpha = 0.1) + 
+    ggtitle("Kernel Function")
+
+ggplot(df, aes(theta, y = density, color = func)) + 
+    geom_point(aes(y = likelihood, col = "likelihood"), alpha = 0.1) + 
+    geom_point(aes(y = prior, col = "prior"), alpha = 0.1) +
+    geom_point(aes(y = kernel, col = "kernel"), alpha = 0.1)
+```
+
+MCMCの中でも直感的にわかりやすい**メトロポリス・ヘイスティングス**(Metropolis Hastings: **MH**)**法**についてです. 最初に文章でMH法の流れを説明します. <br>
+まずは$\theta$の事後分布$f(\theta|D)$に従ってほしいメインの乱数の初期値$\theta_1^{\rm rand}$をなんでもいいので適当に生成します. 例えば「$-2$から$2$の連続一様分布」から生成することにします. 生成した$\theta_1^{\rm rand}$は, 事後分布$f(\theta|D)$に従ってほしい乱数リスト: $\rm rand\_list$にしまっておきます. 
+
+$$
+\theta_1^{\rm rand} \ \rm from \  \rm Uniform(-2, 2) \\
+\rm rand\_list = \{\theta_1^{\rm rand}\}
+$$
+
+もちろん$\theta_1^{\rm rand}$はまだ$\theta$の事後分布$f(\theta|D)$に従っているとはいえません. <br>
+
+次に, メインの$\rm rand\_list$とは全く関係ない「平均$0$, 分散$1^2$の正規分布」に従う乱数$\theta_2^*$を生成し, 最初に生成した$\theta_1^{\rm rand}$に足したものを新たなメインの乱数の候補$\theta_2^{\rm rand候補}$とします. 
+
+$$
+\theta_2^* \ \rm from \  \rm Normal(0, 1^2) \\
+\theta_2^{\rm rand候補} = \theta_1^{\rm rand} + \theta_2^*
+$$
+
+ここで, 候補$\theta_2^{\rm rand候補}$が採用されるにふさわしいかどうか(前の乱数に比べて, より事後分布に従っているかどうか)を判定します. もし$\theta_2^{\rm rand候補}$が$\theta_1^{\rm rand}$よりも事後分布$f(\theta|D)$から"発生しやすそう"なら, $\theta_2^{\rm rand候補}$の確率密度は$\theta_1^{\rm rand}$の確率密度より大きくなるはずです. 
+
+$$
+f(\theta_2^{\rm rand候補}|D) > f(\theta_1^{\rm rand}|D) 
+$$
+
+しかし, 事後分布そのものの確率密度関数$f(\theta|D)$の式はわかりません. でも事後分布に比例しているカーネル$\rm Kernel(\theta)$の式なら知っています. なので$\rm Kernel(\theta)$を使えば2つの確率密度の大小の比較をカーネルの比: $rate$だけで評価できます. (どうでもいい$f(D)$は消えます.)
+
+$$\begin{eqnarray}
+rate &=& \frac {f(\theta_2^{\rm rand候補}|D)} {f(\theta_1^{\rm rand}|D)} \\
+&=& \frac {\frac {f(D|\theta_2^{\rm rand候補})f(\theta_2^{\rm rand候補})} {f(D)}}  
+{\frac {f(D|\theta_1^{\rm rand})f(\theta_1^{\rm rand})} {f(D)}} \\
+&=& \frac {\rm Kernel(\theta_2^{\rm rand候補})} {\rm Kernel(\theta_1^{\rm rand})} \\
+\end{eqnarray}$$
+
+$rate > 1$のとき, つまり「$\theta_2^{\rm rand候補}$が$\theta_1^{\rm rand}$よりも事後分布$f(\theta|D)$から"発生しやすそう"」なとき, $\theta_2^{\rm rand候補}$を正式に$\theta_2^{\rm rand}$として$\rm rand\_list$に採用します$(\theta_2^{\rm rand}=\theta_2^{\rm rand候補})$. $rate < 1$のときでも, 「$\theta_2^{\rm rand候補}$は事後分布$f(\theta|D)$から絶対に発生しない」と断言はできないので, $\rm rand\_list$が事後分布から離れるかもしれないことを覚悟の上で確率$rate$で$\theta_2^{\rm rand候補}$を
+採用します$(\theta_2^{\rm rand}=\theta_2^{\rm rand候補})$. それでも運悪く確率$(1-rate)$を引いたら$\theta_2^{\rm rand候補}$は不採用となり$\theta_1^{\rm rand}$を採用します$(\theta_2^{\rm rand}=\theta_1^{\rm rand})$. つまり変化なしです. 
+
+$$
+\theta_2^{\rm rand} = 
+\begin{cases}
+  \theta_2^{\rm rand候補} & (rate > 1)\\
+  確率rateで\theta_2^{\rm rand候補}, 確率(1-rate)で\theta_1^{\rm rand} & (rate < 1)
+\end{cases} \\
+\rm rand\_list = \{\theta_1^{\rm rand}, \theta_2^{\rm rand}\}
+$$
+
+これを繰り返していくと段々$\rm rand_list$内の乱数が収束します. $\rm rand_list$のある時点以降の収束している部分の乱数はかなり事後分布$f(\theta|D)$から発生しやすいはずなので, その平均をとればパラメータ$\theta$の期待値を近似できます. 
+
+ちなみに, $t$時点で採用される乱数$\theta_t^{\rm rand}$は1時点前の$\theta_t^{\rm rand}$のみに基づいて決まるので, 乱数$\theta_t^{\rm rand}$はマルコフ連鎖です. 
+
+それでは実際にコードを書いて1.の例題でモデリングした$\theta$の期待値の近似値をMH法で求めてみましょう. <br>
+まずは1回だけやってみます. 
+
+```{r MH-one-step}
+# set random seed
+set.seed(1)
+
+# prepare empty random variable list
+rand_list <- c()
+
+# generate initial random variable
+theta_rand_1 <- runif(1, min = -2, max = 2)
+cat("theta_rand_1: ", theta_rand_1, "\n")
+
+rand_list <- c(rand_list, theta_rand_1) # append to `rand_list` 
+cat("rand_list: ", rand_list, "\n")
+
+# suggest a candidate random variable
+last_rand <- rand_list[length(rand_list)]
+theta_rand_cand <- last_rand + rnorm(1, 0, 1)
+cat("theta_rand_cand: ", theta_rand_cand, "\n")
+
+# compare: calculate rate with kernel()
+cat("kernel(theta_rand_cand):", kernel(theta_rand_cand), "\n")
+cat("kernel(theta_rand_1):", kernel(last_rand), "\n")
+
+rate <- kernel(theta_rand_cand) / kernel(last_rand)
+cat("rate: ", rate, "\n")
+
+# evaluate candidate
+if (rate > 1) {
+  # rate > 1: accept candidate as true random variable
+  print("candidate accepted")
+  rand_list <- c(rand_list, theta_rand_cand)
+} else {
+  # rate < 1: 
+  
+  # Bernoulli random variable
+  a <- sample(x = c(1, 0),
+              size = 1,
+              replace = TRUE,
+              prob = c(rate, 1-rate)
+              )
+  
+  if (a == 1) {
+    # accept candidate with probability of `rate`
+    print("candidate accepted (luckily)")
+    rand_list <- c(rand_list, theta_rand_cand)
+  } else {
+    # otherwise, reject candidate and accept the last random variable
+    print("candidate rejected (unluckily)")
+    rand_list <- c(rand_list, last_rand)
+  }
+}
+
+cat("rand_list: ", rand_list, "\n")
+
+```
+
+上の工程をループさせて乱数系列を収束させます. まずは5回繰り返します. 
+
+```{r MH-iter-5, echo=FALSE}
+# set random seed
+set.seed(1)
+
+# prepare empty random variable list
+rand_list <- c()
+
+# generate initial random variable
+theta_rand_1 <- runif(1, min = -2, max = 2)
+# cat("theta_rand_1: ", theta_rand_1, "\n")
+
+rand_list <- c(rand_list, theta_rand_1) # append to `rand_list` 
+# cat("rand_list: ", rand_list, "\n")
+
+for (i in 1:4) {
+  cat("step", i+1, "\n")
+  # suggest a candidate random variable
+  last_rand <- rand_list[length(rand_list)]
+  theta_rand_cand <- last_rand + rnorm(1, 0, 1)
+  cat("theta_rand_cand: ", theta_rand_cand, "\n")
+  
+  # compare: calculate rate with kernel()
+  rate <- kernel(theta_rand_cand) / kernel(last_rand)
+  cat("rate: ", rate, "\n")
+  
+  # evaluate candidate
+  if (rate > 1) {
+    # rate > 1: accept candidate as true random variable
+    print("candidate accepted")
+    rand_list <- c(rand_list, theta_rand_cand)
+  } else {
+    # rate < 1: 
+    
+    # Bernoulli random variable
+    a <- sample(x = c(1, 0),
+                size = 1,
+                replace = TRUE,
+                prob = c(rate, 1-rate)
+                )
+    
+    if (a == 1) {
+      # accept candidate with probability of `rate`
+      print("candidate accepted (luckily)")
+      rand_list <- c(rand_list, theta_rand_cand)
+    } else {
+      # otherwise, reject candidate and accept the last random variable
+      print("candidate rejected (unluckily)")
+      rand_list <- c(rand_list, last_rand)
+    }
+  }
+  
+  cat("rand_list: ", rand_list, "\n")
+  cat("\n")
+}
+
+df <- data.frame(iter = c(1:length(rand_list)),
+                 theta_rand = rand_list)
+
+ggplot(df, aes(iter, theta_rand)) + geom_point() + geom_step() + ggtitle("MH Random Variable Generation: 5 iter")
+```
+
+50回繰り返します. 
+```{r MH-iter-50, echo=FALSE}
+# set random seed
+set.seed(1)
+
+# prepare empty random variable list
+rand_list <- c()
+
+# generate initial random variable
+theta_rand_1 <- runif(1, min = -2, max = 2)
+
+rand_list <- c(rand_list, theta_rand_1) # append to `rand_list` 
+
+for (i in 1:49) {
+  # suggest a candidate random variable
+  last_rand <- rand_list[length(rand_list)]
+  theta_rand_cand <- last_rand + rnorm(1, 0, 1)
+  
+  # compare: calculate rate with kernel()
+  rate <- kernel(theta_rand_cand) / kernel(last_rand)
+  
+  # evaluate candidate
+  if (rate > 1) {
+    # rate > 1: accept candidate as true random variable
+    rand_list <- c(rand_list, theta_rand_cand)
+  } else {
+    # rate < 1: 
+    # Bernoulli random variable
+    a <- sample(x = c(1, 0),
+                size = 1,
+                replace = TRUE,
+                prob = c(rate, 1-rate)
+                )
+    
+    if (a == 1) {
+      # accept candidate with probability of `rate`
+      rand_list <- c(rand_list, theta_rand_cand)
+    } else {
+      # otherwise, reject candidate and accept the last random variable
+      rand_list <- c(rand_list, last_rand)
+    }
+  }
+}
+
+rand_list
+
+
+df <- data.frame(iter = c(1:length(rand_list)),
+                 theta_rand = rand_list)
+
+ggplot(df, aes(iter, theta_rand)) + geom_point() + geom_step() + ggtitle("MH Random Variable Generation: 50 iter")
+```
+
+2000回繰り返します. 
+
+```{r MH-iter-2000, echo=FALSE}
+# set random seed
+set.seed(1)
+
+# prepare empty random variable list
+rand_list <- c()
+
+# generate initial random variable
+theta_rand_1 <- runif(1, min = -2, max = 2)
+
+rand_list <- c(rand_list, theta_rand_1) # append to `rand_list` 
+
+for (i in 1:1999) {
+  # suggest a candidate random variable
+  last_rand <- rand_list[length(rand_list)]
+  theta_rand_cand <- last_rand + rnorm(1, 0, 1)
+  
+  # compare: calculate rate with kernel()
+  rate <- kernel(theta_rand_cand) / kernel(last_rand)
+  
+  # evaluate candidate
+  if (rate > 1) {
+    # rate > 1: accept candidate as true random variable
+    rand_list <- c(rand_list, theta_rand_cand)
+  } else {
+    # rate < 1: 
+    # Bernoulli random variable
+    a <- sample(x = c(1, 0),
+                size = 1,
+                replace = TRUE,
+                prob = c(rate, 1-rate)
+                )
+    
+    if (a == 1) {
+      # accept candidate with probability of `rate`
+      rand_list <- c(rand_list, theta_rand_cand)
+    } else {
+      # otherwise, reject candidate and accept the last random variable
+      rand_list <- c(rand_list, last_rand)
+    }
+  }
+}
+
+# rand_list
+
+df <- data.frame(iter = c(1:length(rand_list)),
+                 theta_rand = rand_list)
+
+ggplot(df, aes(iter, theta_rand)) + geom_point() + geom_step() + ggtitle("MH Random Variable Generation: 2000 iter")
+```
+
+このグラフを**トレースプロット**といいます. 100回を超えたあたりから変動が安定し, 乱数系列が収束していることがわかります. 
+
+まだいくつか注意すべきことがあるのですが, とりあえず得られた収束した乱数`rand_list[-(1:100)]`の平均を計算してみましょう. 
+
+```{r Monte-Carlo-integration}
+mean(rand_list[-(1:100)])
+```
+
+これが求めたい期待値$E\left[ \theta \right] = \int_{-\infty}^{\infty} f(\theta|D)\theta d\theta$の近似値となります. 
+
+MH法のポイントは, デフォルトで実装されているような簡単な乱数(`runif()`, `rnorm()`)を基に, $rate$を用いながら実際に事後分布$f(\theta|D)$に従ってそうな乱数を作り出していることです. 
+
+### 乱数の取り扱い
+
+MCMCで得られた乱数をどう扱うかを学びます. 先ではとりあえず最後のモンテカルロ積分までやって$\theta$の推定値を計算しましたが, 本当はいくつか注意すべきことがあります. 
+
+* MCMC実行に関する各種設定
+
+  * **繰り返し数**(**iter**)の設定
+  
+    生成する乱数の個数です. Stanでは2000が設定されることが多いですが, なかなか収束しないときは大きなiterにします. 
+    
+  * **バーンイン期間**(**warmup**)の設定
+  
+    乱数生成にはどうしても初期値が必要です. でも初期値や最初の方の乱数は事後分布に従ってるとはいえません. そこで最初の一部分を切り捨て, 事後分布に従ってそうな乱数だけ残します. 乱数のうち切り捨てる期間のことをバーンイン期間(Stanではwarmup)と呼びます. 
+    
+  * **間引き**(**thin**)の設定
+  
+    MCMCでは乱数$\theta_t^{\rm rand}$を1時点前の$\theta_t^{\rm rand}$に基づいて生成するので, 乱数が自己相関する可能性があります. そこで乱数生成時に, 2回に1回(thin=2), 3回に1回(thin=1)だけ乱数を間引いて採用することで乱数の自己相関をある程度緩和させます. 
+    
+* 収束の評価
+
+  * **チェーン**(**chains**)の設定
+  
+    MCMCで生成するのはあくまでも乱数です. 毎回実行するたびに異なる乱数が得られ, 異なる結果(e.g.平均値)を得ることになります. 実行結果がどれも似たような値に収束しているかどうか判定するために, MCMCによって乱数系列を1つ作成する実行単位をチェーンとし, チェーン数を指定して複数の乱数系列を作成します. 通常chains=4を指定することが多いようです. iter=2000, warmup=1000, chains=4なら, 乱数は$(2000-1000)\times4=4000$個です. 
+
+  $$
+  \rm chain1 = \overbrace{ \overbrace{ \{
+      \theta_{1,1}^{\rm rand}, \theta_{1,2}^{\rm rand}, \ldots, \theta_{1,1000}^{\rm rand}}^{warmup}, \ldots, \theta_{1,2000}^{\rm rand}}^{iter}
+  \} \\
+  \rm chain2 = \left\{
+      \theta_{2,1}^{\rm rand}, \theta_{2,2}^{\rm rand}, \ldots, \theta_{2,1000}^{\rm rand}, \ldots, \theta_{2,2000}^{\rm rand}
+  \right\} \\  
+  \rm chain3 = \left\{
+      \theta_{3,1}^{\rm rand}, \theta_{3,2}^{\rm rand}, \ldots, \theta_{3,1000}^{\rm rand}, \ldots, \theta_{3,2000}^{\rm rand}
+  \right\} \\  
+  \rm chain4 = \left\{
+      \theta_{4,1}^{\rm rand}, \theta_{4,2}^{\rm rand}, \ldots, \theta_{4,1000}^{\rm rand}, \ldots, \theta_{4,2000}^{\rm rand}
+  \right\} \\  
+  $$
+  * 収束の判定
+  
+    収束の判定指標として以下の$\hat{R}$を使います. 
+
+  $$
+    \hat{R} = \frac {同一チェーン内での乱数の分散の平均値} {異なるチェーンも含めた全ての乱数での分散}
+  $$
+
+  $\hat{R}$の特性として, 異なるチェーン間で乱数の分布が大きく異と分母に比べて分子が大きくなり, 1より大きくなります. そこで, $\hat{R}<1.1$になるまでサンプリングを繰り返し, 異なるチェーン間で同じような値に収束するようにします. 
+  
+* 報告するものを計算
+
+  * 区間推定
+  
+    * **ベイズ信用区間**
+    
+      MCMCで発生させた事後分布に従う乱数を小さい順にソートして並べます. これが$\theta$の事後分布そのものを表現していることになります. その分布から$\left[ 2.5\% \text{点}の乱数, 97.5\% \text{点}の乱数\right]$をとると**95%ベイズ信用区間**となります. 「確率変数$\theta$は95%の確率で95%ベイズ信用区間のうちのどれかの値をとる」という解釈です. 
+  
+  * 点推定
+  
+    * **事後中央値**(posteriori MEDian: **MED**) 
+    
+      得られた事後分布の中央値$\hat{\theta}^{MED}$を$\theta$の推定値として報告します. 
+    
+    * **事後期待値**(Expected A Posteriori: **EAP**)
+    
+      得られた事後分布の期待値(離散な乱数の平均値)$\hat{\theta}^{EAP}$を$\theta$の推定値として報告します.   
+    
+    * **事後確率最大値**(Maximum A Posteriori: **MAP**)
+    
+      得られた事後分布の確率(密度)が最大となる$\theta$, $\hat{\theta}^{MAP}$を$\theta$の推定値として報告します. 
+
+以上の注意点を踏まえてもう一度しっかり$\theta$の期待値を近似してみましょう. MCMCの各種設定はStanが得意としているので今回はStanに任せましょう. (StanではMH法ではなくHMC法の１つの実装, NUTSが採用されています)
+
+### RStanの実行
+
+```{r run-Stan-in-R}
+# --- Prepare packages ----------------------------------------------
+
+# read rstan package
+library(rstan)
+
+# set options (I don't know how it works though ...)
+rstan_options(auto_write = TRUE)                      # output compile result: .rds file
+options(mc.cores = parallel::detectCores())           # parallel computing
+
+# --- Prepare Data ----------------------------------------------
+
+# d <- c(2.4,3.2,2.2,4.6,3.3)
+
+# --- Make a data list for Stan: list(data, N) ----------------------------------------------
+
+# sample size (vector length)
+sample_size <- length(d)
+sample_size
+
+# needed to be defined same name as stan parametes block
+data_list <- list(data_vec = d, N = sample_size)
+data_list
+
+# --- MCMC sampling, run Stan from rstan ----------------------------------------------
+
+# generate random variables (MCMC random sampling)
+mcmc_result <- stan(
+  file = "stan_code.stan", # stan file pass
+  data = data_list,        # A named data list. see "?stan > Passing data to Stan"
+  seed = 1,                # random seed
+  chains = 4,              # number of chains (default = 4)
+  iter = 2000,             # random sampling iteration (default = 2000)
+  warmup = 1000,           # warmup (default = floor(iter/2))
+  thin = 1                 # thin (default = 1)
+)
+```
+
+結果を見てみましょう. 
+
+```{r Rstan-result}
+# extract mcmc samples
+mcmc_sample <- rstan::extract(mcmc_result, permuted = FALSE)
+head(mcmc_sample)
+dim(mcmc_sample)
+dimnames(mcmc_sample)
+
+# plot posterior with mcmc samples
+hist(mcmc_sample[, , "theta"], main = "Posterior PDF")
+
+# print result
+print(
+  mcmc_result,
+  probs = c(0.025, 0.5, 0.975)
+)
+
+# --- Plot MCMC sampling -------------------------------------------------------------------
+
+# traceplot without warmup
+traceplot(mcmc_result) + ggtitle("traceplot without warmup")
+
+# traceplot includeing initial warmup
+traceplot(mcmc_result, inc_warmup = T) + ggtitle("traceplot including warmup")
+
+```
+
+MCMCでサンプリングした乱数のヒストグラムが事後分布です. `print`より, 95%ベイズ信用区間は$\left[2.28, 4.0 \right]$, ベイズ推定値は$\hat{\theta}^{MED} = 3.15$, $\hat{\theta}^{EAP} = 3.15$であることがわかります. 先にとりあえず計算した平均値よりもうまく$E \left[ \theta \right]$近似できているはずです.
+
+### ハミルトニアン・モンテカルロ法(HMC法)
+
+MH法では候補を提案する際にメインの乱数に足した乱数$\theta_2^*$は「平均$0$, 分散$1^2$の正規分布」に従うとしました. 分散を変えたらどうなるでしょう? *on hold*
+
+<a id="anchor3"></a>
+
+## 3.手計算
+
+計算機に頼らず直接事後確率密度関数$f(\theta|D)$を求めてみます. 
+[事後分布の式](#anchor4)をそのまま扱うのはむずかしいので, きれいにして理解と計算がしやすいようにします. 
+最終的に$\theta$事後分布の確率密度関数そのものをプロットしてみます. 適当に流れを追ってみてください. 
+
+### 尤度関数の整理
+
+まず尤度$f(D|\theta)$の式をきれいにしてプロットします. 
 
 $$\begin{eqnarray}
 f(D|\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \\
@@ -164,7 +742,7 @@ f(D|\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i
 \exp \left( -\frac {5 ( \theta - 3.14)^2} {2} \right)
 \end{eqnarray}$$
 
-```{r,  analyticalal solution likelihood plot}
+```{r analyticalal-solution-likelihood}
 # calculate sample meand and variance
 d <- c(2.4,3.2,2.2,4.6,3.3)
 x_bar <-  mean(d) # sample mean
@@ -172,52 +750,47 @@ s_square <-  var(d) # sample variance
 cat("sample mean:", x_bar, ", sample variance:", s_square)
 
 # ANALYTICAL SOLUTION plot likelihood function
-likelihood <- function(theta) {
-  return ((1 / sqrt(2*pi))^5 * exp(- 5 * s_square^2 / 2) * exp(- 5 * (theta - x_bar)^2 / 2))
+likelihood_analytical <- function(theta) {
+  return (
+    (1 / sqrt(2 * pi))^5 * 
+    exp(- (5 * s_square^2) / 2) * 
+    exp(- (5 * (theta - x_bar)^2) / 2)
+    )
 }
 
 grid <-  seq(-10,10,0.01)
-plot(grid, likelihood(grid),
-     main="Likelihood Function",
+plot(grid, likelihood_analytical(grid),
+     main="Analytical Likelihood Function",
      xlab="theta",
      ylab="likelihood(theta): f(D | theta)")
 
 # プロットするだけなら別に式きれいにしなくてもそのまま総乗の尤度でいい
-likelihood_prod <- function(theta) {
-  prod <-  1
-  for (i in 1:5) {
-    prod <- prod * (1 / sqrt(2*pi)) * exp(-(d[i] - theta)^2 / 2)
-  }
-  return (prod)
-}
-
-grid <-  seq(-10,10,0.01)
-plot(grid, likelihood(grid),
-     main="Likelihood Function (そのまま)",
-     xlab="theta",
-     ylab="likelihood(theta): f(D | theta)")
+# floatによって微妙に違うかも?
+# grid <-  seq(-10,10,0.01)
+# plot(grid, likelihood(grid),
+#      main="Likelihood Function (そのまま)",
+#      xlab="theta",
+#      ylab="likelihood(theta): f(D | theta)")
 ```
 
-Note: 当たり前ですが尤度を最大にする$\theta$は最尤推定量$\hat{\theta}^{\rm likelihood}=\bar{x}$であり、$3.14$です。
+Note: 当たり前ですが尤度を最大にする$\theta$は最尤推定量$\hat{\theta}^{\rm MLE}=\bar{x}$であり, $3.14$です. 
 
-```{r maximum likelihood}
+```{r maximum-likelihood}
 # the value of theta which maximizes likelihood function
 grid[which.max(likelihood(grid))]
 
 ```
 
-次に事前分布$f(\theta)$の式をプロットしてみます。
+### 事前確率密度関数の整理
+
+次に事前分布$f(\theta)$の式をプロットしてみます. 
 
 $$\begin{eqnarray}
 f(\theta)=\frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right)
 \end{eqnarray}$$
 
-```{r,  analyticalal solution prior plot}
+```{r analyticalal-solution-prior}
 # ANALYTICAL SOLUTION plot prior probability density function
-prior <- function(theta) {
-  return ((1 / sqrt(20000*pi))^5 * exp(-(theta^2 / 20000)))
-}
-
 grid <-  seq(-10,10,0.01)
 plot(grid, prior(grid),
      main="Prior PDF",
@@ -225,7 +798,9 @@ plot(grid, prior(grid),
      ylab="Prior Probability Density(theta): f(theta)")
 ```
 
-尤度と事前分布を掛け合わせたカーネル$f(D|\theta)f(\theta)$の式をきれいにしてプロットしてみます。
+### カーネル関数の整理
+
+尤度と事前分布を掛け合わせたカーネル$f(D|\theta)f(\theta)$の式をきれいにしてプロットしてみます. 
 
 $$\begin{eqnarray}
 f(D|\theta)f(\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \frac {1} {\sqrt{20000 \pi}} \exp(-\frac {\theta^ 2} {20000}) \\
@@ -262,9 +837,9 @@ f(D|\theta)f(\theta) &=& \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\f
 \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \\
 \end{eqnarray}$$
 
-```{r,  analyticalal solution kernel plot}
+```{r analyticalal-solution-kernel}
 # ANALYTICAL SOLUTION plot kernel function
-kernel <- function(theta) {
+kernel_analytical <- function(theta) {
   return (  (1 / sqrt(20000 * pi)) *
             (1 / sqrt(2 * pi)) ^ 5 * 
             exp(-(5 * s_square) / 2) * 
@@ -274,49 +849,47 @@ kernel <- function(theta) {
 }
 
 grid <-  seq(-10,10,0.01)
-plot(grid, kernel(grid),
-     main="Kernel",
+plot(grid, kernel_analytical(grid),
+     main="Analytical Kernel",
      xlab="theta",
      ylab="Kernel(theta): f(D | theta)f(theta)")
 
-# プロットするだけならlikelihood * priorのままでいい
-likelihood_times_prior <- function(theta) {
-  return (likelihood(theta)*prior(theta))
-}
-
-grid <-  seq(-10,10,0.01)
-plot(grid, likelihood_times_prior(grid),
-     main="Kernel = Likelihood * Prior",
-     xlab="theta",
-     ylab="Kernel(theta): f(D | theta)f(theta)")
+# # プロットするだけならlikelihood * priorのままでいい
+# grid <-  seq(-10,10,0.01)
+# plot(grid, kernel(grid),
+#      main="Kernel = Likelihood * Prior",
+#      xlab="theta",
+#      ylab="Kernel(theta): f(D | theta)f(theta)")
 
 # check argmax theta
+grid[which.max(kernel_analytical(grid))]
 grid[which.max(kernel(grid))]
-grid[which.max(likelihood_times_prior(grid))]
 ```
+
+### 正規化定数の整理
 
 正規化定数$f(D)$の値を計算すると
 
 $$\begin{eqnarray}
-f(D) &=& \int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta \\
-&=& \int_{-\infty}^{\infty} \left[ \underbrace{ \frac {1} {\sqrt{20000 \pi}} 
-\left( \frac {1} {\sqrt{2\pi}} \right)^5 
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right) }_{定数}
-\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \right] d\theta \\
-&=& \frac {1} {\sqrt{20000 \pi}}
-\left( \frac {1} {\sqrt{2\pi}} \right)^5
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-\int_{-\infty}^{\infty} \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) d\theta \\
-&=& \underbrace{ \frac {1} {\sqrt{20000 \pi}}
-\left( \frac {1} {\sqrt{2\pi}} \right)^5
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}} }_{定数} \\
+  f(D) &=& \int_{-\infty}^{\infty} f(D|\theta)f(\theta) d\theta \\
+  &=& \int_{-\infty}^{\infty} \left[ \underbrace{ \frac {1} {\sqrt{20000 \pi}} 
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right) }_{定数}
+  \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \right] d\theta \\
+  &=& \frac {1} {\sqrt{20000 \pi}}
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  \underbrace{\int_{-\infty}^{\infty} \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) d\theta}_{ガウス積分} \\
+  &=& \underbrace{ \frac {1} {\sqrt{20000 \pi}}
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  \sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}} }_{定数} \\
 \end{eqnarray}$$
 
-```{r}
+```{r analytical-solution-normalizing-constant}
 # ANALYTICAL SOLUTION calculate normalizing constant
 constant <- (1 / sqrt(20000 * pi)) *
             (1 / sqrt(2 * pi)) ^ 5 * 
@@ -327,65 +900,69 @@ constant <- (1 / sqrt(20000 * pi)) *
 print(constant)
 ```
 
-最後にベイズの式に上全てを代入して事後分布の式をきれいにしてプロットすると、
+### 事後確率密度関数の導出
+
+最後にベイズの式に上全てを代入して事後分布の式をきれいにしてプロットすると, 
 
 $$\begin{eqnarray}
-f(\theta|D) &=& \frac {f(D|\theta)f(D)} {f(D)} \\
-&=& \frac 
-{\frac {1} {\sqrt{20000 \pi}} 
-\left( \frac {1} {\sqrt{2\pi}} \right)^5 
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-\exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right)
-} 
-{\frac {1} {\sqrt{20000 \pi}}
-\left( \frac {1} {\sqrt{2\pi}} \right)^5
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
-} \\
-&=& \frac 
-{\frac {1} {\sqrt{20000 \pi}} 
-\left( \frac {1} {\sqrt{2\pi}} \right)^5 
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-} 
-{\frac {1} {\sqrt{20000 \pi}}
-\left( \frac {1} {\sqrt{2\pi}} \right)^5
-\exp \left( -\frac {5 \times 0.898} {2} \right) 
-\exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
-\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
-} \exp \left( - \frac {\left( \overset{確率変数} \theta - \frac {50000\times3.14} {50001} \right)^2} {2 \frac {10000} {50001}}  \right)
+  f(\theta|D) &=& \frac {f(D|\theta)f(D)} {f(D)} \\
+  &=& \frac 
+  {\frac {1} {\sqrt{20000 \pi}} 
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right)
+  } 
+  {\frac {1} {\sqrt{20000 \pi}}
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  \sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
+  } \\
+  &=& \frac 
+  {\frac {1} {\sqrt{20000 \pi}} 
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5 
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  } 
+  {\frac {1} {\sqrt{20000 \pi}}
+  \left( \frac {1} {\sqrt{2\pi}} \right)^5
+  \exp \left( -\frac {5 \times 0.898} {2} \right) 
+  \exp \left( - \frac {5(- 3.14^2)} {2\times50001} \right)
+  \sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}
+  } \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \\
+  &=& \frac 
+  {1} {\sqrt{\frac {\pi} {\left(\frac {50001} {20000} \right)}}}
+  \exp \left( - \frac {50001} {20000} \left( \theta - \frac {50000\times3.14} {50001} \right)^2 \right) \\
+  &=& \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \exp \left( - \frac {\left( \overset{確率変数} \theta - \frac {50000\times3.14} {50001} \right)^2} {2 \frac{10000} {50001}} \right)
 \end{eqnarray}$$
 
-```{r,  analyticalal solution posterior plot}
-# ANALYTICAL SOLUTION plot posterior probabolity density function
-posterior <- function(theta) {
+```{r analyticalal-solution-posterior}
+# ANALYTICAL SOLUTION plot posterior probability density function
+posterior_analytical <- function(theta) {
   return (
-    ((1 / sqrt(20000 * pi)) *
-    (1 / sqrt(2 * pi)) ^ 5 * 
-    exp(-(5 * s_square) / 2) * 
-    exp(-(5 * -x_bar^2) / (2 * 50001)) / constant) *
-    exp(-(theta - (50000 * x_bar) / 50001)^2 / (2 * (10000 / 500001)))
+    (1 / sqrt(pi / (50001 / 20000))) *exp(-(theta - (50000 * x_bar) / 50001)^2 / (2 * (10000 / 500001)))
   )
 }
 
 
 grid <-  seq(-10,10,0.01)
-plot(grid, posterior(grid),
-     main="Posterior PDF",
+plot(grid, posterior_analytical(grid),
+     main="Analytical Posterior PDF",
      xlab="theta",
-     ylab="Prior Probability Density(theta): f(theta | D)")
+     ylab="Posterior Probability Density(theta): f(theta | D)")
 
 # plot likelihood, prior, kernel, and posterior
-# priorがかなり弱いので、posteriorはほとんど変化しない。
-library(ggplot2)
+# priorがかなり弱いので, posteriorはほぼ尤度と一緒. 
+# 正規化定数で割ってる分尤度とはスケールが異なる. 
 
 df <- data.frame('theta' = grid,
-                 'likelihood' = likelihood(grid),
+                 'likelihood' = likelihood_analytical(grid),
                  'prior' = prior(grid),
-                 'kernel' = kernel(grid),
-                 'posterior' = posterior(grid)
+                 'kernel' = kernel_analytical(grid),
+                 'posterior' = posterior_analytical(grid)
                  )
 
 ggplot(df, aes(theta, y = density, color = func)) + 
@@ -400,13 +977,82 @@ ggplot(df, aes(theta, y = density, color = func)) +
     geom_point(aes(y = kernel, col = "kernel"), alpha = 0.5)# +
     #geom_point(aes(y = posterior, col = "posterior"), alpha = 0.5)
 
-# check argmax theta
-grid[which.max(posterior(grid))]
+# check argmax theta (MAP)
+grid[which.max(posterior_analytical(grid))]
 ```
 
-ここまでかなり大変だったと思いますが、これは知っている分布、$正規分布 \times 正規分布 \rightarrow 正規分布$の計算でこれでもかなり簡単な方です。知らない分布、むずかしい分布だと手計算では難しくなります。そこでMCMCを導入します。
+$\theta$の事後分布$f(\theta|D)$は, 平均$\frac {50000\times3.14} {50001}$, 分散$\frac{10000} {50001}$, の正規分布であることがわかります. 
 
+事後分布の期待値を求めたい場合は, 
+
+$$\begin{eqnarray}
+\int_{-\infty}^{\infty} f(\theta|D)\theta d\theta
+\end{eqnarray}$$
+
+を計算します. 頑張って手計算でやってみると, 
+
+$$\begin{eqnarray}
+  \int_{-\infty}^{\infty} f(\theta|D) \theta d\theta 
+  &=& 
+  \int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \theta 
+  \exp \left( - \frac {\left( \theta - \frac {50000\times3.14} {50001} \right)^2} {2 \frac{10000} {50001}} \right)
+  d\theta \\
+  \theta - \frac {50000\times3.14} {50001}=aと置換すると, \\
+  &=& \int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \left( a + \frac {50000\times3.14} {50001} \right)
+  \exp \left( - \frac {a^2} {2 \frac{10000} {50001}} \right)
+  da \\
+  &=& \int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \left( a \right)
+  \exp \left( - \frac {a^2} {2 \frac{10000} {50001}} \right)
+  da + 
+  \int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \left(\frac {50000\times3.14} {50001} \right)
+  \exp \left( - \frac {a^2} {2 \frac{10000} {50001}} \right)
+  da \\
+  &=& \underbrace{ \int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \overbrace{\left( a \right)}^{奇関数}
+  \overbrace{\exp \left( - \frac {a^2} {2 \frac{10000} {50001}} \right) }^{偶関数}
+  da}_{奇関数の積分=0} + 
+  \left(\frac {50000\times3.14} {50001} \right)
+  \underbrace{\int_{-\infty}^{\infty} 
+  \frac 
+  {1} {\sqrt{2 \pi \frac {10000} {50001}}}
+  \exp \left( - \frac {a^2} {2 \frac{10000} {50001}} \right)
+  da}_{正規分布の積分=1} \\
+  &=& \frac {50000\times3.14} {50001}
+\end{eqnarray}$$
+
+```{r theta-mean-analytical-solution}
+(50000 * 3.14) / 50001
+```
+
+となります. 
+
+ここまでかなり大変だったと思いますが, これは知っている分布, $正規分布 \times 正規分布 \rightarrow 正規分布$の計算でこれでもかなり簡単な方です. 知らない分布, むずかしい分布だと手計算では難しくなります. 特に最後の$\int_{-\infty}^{\infty} f(\theta|D)\theta d\theta$の計算はかなりてこずります. 一方, 事後分布のカーネル$f(\theta|D) \propto f(D|\theta)f(\theta) = \rm Kernel(\theta)$はどんな関数かはわかっているので, 何んらかの値の$\theta$を$\rm Kernel(\theta)$に代入すれば, 何かしらの値が返ってきます. 
+
+$$\begin{eqnarray}
+  \rm Kernel(\theta) &=& f(D|\theta)f(\theta) \\ 
+  &=&  \left[ \prod_{i=1}^{5} \frac {1} {\sqrt{2 \pi}} \exp \left(-\frac {(x_i-\theta)^ 2} {2} \right) \right] \cdot
+  \left[ \frac {1} {\sqrt{20000 \pi}} \exp \left(-\frac {\theta^ 2} {20000} \right) \right]
+\end{eqnarray}$$
+
+そこでMCMCでは$\rm Kernel(\theta)$だけ利用して, 比較的簡単に近似値を計算することができます. 
 
 参考:<br>
+モンテカルロ積分 https://aidiary.hatenablog.com/entry/20140728/1406555863# <br>
+stanfitオブジェクト https://mc-stan.org/rstan/reference/stanfit-class.html <br>
 正規分布の事後分布の平均と分散 https://ai-trend.jp/basic-study/bayes/bayes-normal-distribution/ <br>
-ガウス積分と正規分布 https://www.momoyama-usagi.com/entry/math/analysis26
+ガウス積分 https://risalc.info/src/gaussian-integral.html
+正規分布と平均 https://manabitimes.jp/math/931 <br>
