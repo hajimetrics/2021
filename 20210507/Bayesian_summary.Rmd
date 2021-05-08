@@ -691,11 +691,11 @@ $$
 <br />
 <br />
 
-（実現値 $\alpha^{real},\beta^{real},\sigma^{real}$ の下で $y\hat{y_{next}$ が $y^{*}$　をとる確率密度）×　(その $\alpha^{real},\beta^{real},\sigma^{real}$ が実現する確率密度 (=事後確率密度) ）をすべての $\alpha^{real},\beta^{real},\sigma^{real}$
+（実現値 $\alpha^{real},\beta^{real},\sigma^{real}$ の下で $\hat{y_{next}}$ が $y^{*}$　をとる確率密度）×　(その $\alpha^{real},\beta^{real},\sigma^{real}$ が実現する確率密度 (=事後確率密度) ）をすべての $\alpha^{real},\beta^{real},\sigma^{real}$
 について足し合わせる
 <br />
 
-→　$y\hat{y_{next}$ が $y^{*}$　をとる確率密度が出てくるはず
+→　$\hat{y_{next}}$ が $y^{*}$　をとる確率密度が出てくるはず
 
 $$
 \begin{eqnarray}
