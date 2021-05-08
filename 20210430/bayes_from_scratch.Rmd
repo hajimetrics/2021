@@ -1054,5 +1054,5 @@ $$\begin{eqnarray}
 モンテカルロ積分 https://aidiary.hatenablog.com/entry/20140728/1406555863# <br>
 stanfitオブジェクト https://mc-stan.org/rstan/reference/stanfit-class.html <br>
 正規分布の事後分布の平均と分散 https://ai-trend.jp/basic-study/bayes/bayes-normal-distribution/ <br>
-ガウス積分 https://risalc.info/src/gaussian-integral.html
+ガウス積分 https://risalc.info/src/gaussian-integral.html <br>
 正規分布と平均 https://manabitimes.jp/math/931 <br>

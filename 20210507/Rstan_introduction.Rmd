@@ -1,0 +1,304 @@
+---
+title: "Rstan Introduction"
+author: ""
+date: "2021/5/6"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## RStanの実行
+
+- 基本的に2つのファイルが必要
+<br />
+<br />
+
+  + **データ処理のための「.R」ファイル**
+<br />
+
+  + **RStanを使ってMCMCを実行するときに必要な「.stan」ファイル**
+<br />
+<br />
+
+  さらに必要に応じて
+<br />
+
+  + **データを格納した「.csv」ファイル**
+
+## 「.stan」ファイル
+
+- RStudionでは、「File →　New File → Stan File」で作成可能
+<br />
+<br />
+<br />
+
+
+- 「.stan」ファイルは、主に以下の3つの「ブロック」で構成される
+<br />
+<br />
+
+   + `data` ブロック ... データとサンプルサイズの情報
+<br />
+
+   + `parameters` ブロック ... 事後分布を得たいパラメータの定義
+<br />
+
+   + `model` ブロック ... モデル（尤度）, 事前分布の定義
+<br />
+
+## 「.stan」ファイル
+
+- 文法は直感的で分かりやすい（詳しくは後程）
+<br />
+<br />
+
+- **注意点**
+<br />
+
+  + ブロックは中括弧 `{ }` で囲む
+<br />
+
+  + 行の最後にはセミコロン `;` を打つ
+<br />
+
+  + コメントアウトはスラッシュ2本 `//`
+<br />
+
+  + ファイルの最終行には空白行
+<br />
+<br />
+
+RStudioでは「Check」でミスがないか確認可能
+
+## 早速書いてみよう
+
+- 以下のビールの売り上げのモデルのパラメータを推定
+<br />
+<br />
+
+$$
+Sales_i \sim Normal\,(\mu,\sigma^2)\\
+\\
+(\,\Longleftrightarrow \, Sales_i = \mu + \epsilon_i,\,\, \epsilon_i\sim Normal\,(0,\sigma^2)\,)
+$$
+<br />
+
+  + それぞれの売り上げの観測値が平均 $\mu$,分散 $\sigma^2$ の正規分布に従うという簡単なモデル
+<br />
+<br />
+
+- データは「"2-4-1-beer-sales-1.csv"」に格納されている
+
+## 「.stan」を書く
+
+- 「beer_sales.stan」
+```Stan
+
+data {
+  int N;                //サンプルサイズ
+  vector[N] sales;      //データ
+}
+
+parameters {
+  real mu;               //平均のパラメータ
+  real<lower=0> sigma;   //標準偏差のパラメータ
+}
+
+model {
+  for (i in 1:N) {
+    sales[i] ~ normal(mu,sigma);
+  }     // salesのi番目の値が平均mu,標準偏差sigmaの正規分布から得られた
+}       //今回はmu,sigmaの事前分布は指定なし　= (-∞,∞)の一様分布
+
+```
+
+## 「.stan」を書く
+
+- `N` , `sales` については「.R」ファイル内でデータを使って定義
+<br />
+
+- `mu` , `sigma` はパラメータブロックで定義されている
+<br />
+<br />
+
+- 全ての変数・パラメータについて,「型(type)」指定をしなくてはならないことに注意
+<br />
+
+   + 実数 ... `real` (`upper`,`lower`で上下限の指定もできる)
+<br />
+
+   + 整数 ... `int`
+<br />
+
+   + ベクトル（要素数N） ... `vector[N]`
+<br />
+
+   + 行列（K行J列） ... `matrix[K,J]`
+<br />
+
+
+## 「.stan」を書く
+
+<br />
+<br />
+
+- `model` ブロックは `for` 文ではなく,　ベクトルそのままでも良い
+<br />
+<br />
+
+```Stan
+
+model {
+  sales ~ normal(mu,sigma);
+} 
+
+```
+
+
+## 「.R」ファイル; 準備
+
+- まずはデータを読み込む
+
+```{r, echo=TRUE}
+
+file_beer_sales_1 <- read.csv("2-4-1-beer-sales-1.csv")
+head(file_beer_sales_1)
+
+```
+
+
+```{r, echo=TRUE}
+head(file_beer_sales_1$sales)
+```
+
+## 「.R」ファイル; 準備
+
+- サンプルサイズを取得
+
+```{r, echo=TRUE}
+sample_size <- nrow(file_beer_sales_1)
+```
+<br />
+
+- **listで「.Stan」に受け渡すobjectを作る**
+
+```{r, echo=TRUE}
+data_list <- list(sales = file_beer_sales_1$sales, N = sample_size)
+head(data_list$sales)
+data_list$N
+```
+
+## 「.R」ファイル; MCMCを実行
+
+```{r, echo=TRUE, message=FALSE}
+library(rstan)
+mcmc_result <- stan(
+  file = "beer_sales.stan",  #「.stan」ファイル
+  data = data_list,          # 受け渡すlist
+  seed = 1,　　　　　　　　　  # 乱数のシード
+  chains = 4,　　　　　　　　  # チェーン数
+  iter = 2000,　　　　　　　   # 1チェーンあたりの乱数の数
+  warmup = 1000,　　　　　　  # バーンイン期間の数
+  thin = 1,　　　　　　　　　  # 間引き（今回は1なので間引きなし）
+)
+```
+
+## MCMCの実行結果
+
+```{r,echo=TRUE}
+print(
+  mcmc_result,
+  probs=c(0.025,0.5,0.975) #95%信用区間と中央値（MED推定量）
+)
+```
+
+## 古典的な推定値
+
+```{r,echo=TRUE}
+print(mean(file_beer_sales_1$sales)) #mean
+print(sd(file_beer_sales_1$sales))  #srandard deviation
+```
+
+## トレースプロット
+
+```{r,echo=TRUE}
+traceplot(mcmc_result)
+```
+
+
+## MCMCサンプルの抽出
+
+```{r,echo=TRUE}
+mcmc_sample <- rstan::extract(mcmc_result, permuted=FALSE)
+# permuted=FALSE で並び順を保持
+print(class(mcmc_sample))
+print(dim(mcmc_sample))
+```
+
+## MCMCサンプルの抽出
+
+```{r,echo=TRUE}
+print(dimnames(mcmc_sample))
+```
+
+## 代表値の計算
+
+```{r,echo=TRUE}
+#サンプルのうちmuの情報だけ取り出しベクトルに
+mu_mcmc_vec <-as.vector(mcmc_sample[,,"mu"])
+
+#事後中央値(MED)
+print(median(mu_mcmc_vec))
+#事後期待値(EAP)
+print(mean(mu_mcmc_vec))
+```
+
+
+## 代表値の計算
+```{r,echo=TRUE}
+#95％信用区間
+print(quantile(mu_mcmc_vec,probs=c(0.025,0.975)))
+
+#事後最高密度値は連続かつ乱数なので求められない
+# →　ヒストグラムからカーネル密度推定
+```
+
+
+```{r,echo=TRUE}
+```
+
+## 事後分布のプロット
+
+```{r,echo=TRUE,warning=FALSE,message=FALSE}
+
+library(bayesplot)
+
+#ヒストグラム
+mcmc_hist(mcmc_sample,pars=c("mu","sigma"))
+```
+
+## 事後分布のプロット
+
+```{r,echo=TRUE,message=FALSE}
+
+#カーネル密度推定
+mcmc_dens(mcmc_sample,pars=c("mu","sigma"))
+```
+
+
+## MCMCサンプルの自己相関の評価
+
+```{r,echo=TRUE,message=FALSE}
+
+#コレログラム
+mcmc_acf_bar(mcmc_sample,pars=c("mu","sigma"))
+```
+
+## 参考文献
+
+- 馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社, 第2部第4章,第2部第5章
+
+
+
