@@ -105,7 +105,7 @@ $$
 <br />
 
 尤度とは、あるパラメータの下で手元のデータが手に入る確率（のようなもの）である。
-1つのデータ $(x_1,y_1)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$のもとでそのデータが手に入る確率は
+1つのデータ $(x_1,y_1)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$の下でそのデータが手に入る確率は
 $$
 \begin{eqnarray}
 y_1 = \alpha^{*} + \beta^{*} x_1 + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{*}}^2)
