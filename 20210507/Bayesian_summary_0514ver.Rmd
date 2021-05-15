@@ -75,13 +75,13 @@ $f(\,Data\,|\,\beta=\beta^{*}\,)$ 　...　 尤度  (確率変数 $\beta$ があ
 $\int_{-\infty}^{\infty} \,f(\,Data\,|\,\beta=\beta^{real}\,)\cdot f(\,\beta=\beta^{real}\,)\,\,d\beta^{real}$
 ...　手元のデータが得られる確率(密度)であり、確率変数 $\beta$ がとり得る実現値　$\beta^{real}$ の全<br>
 &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
-てについて、事前分布の下その値が実現し、かつその値の下で手元のデータが得られる<br>
+てについて、事前分布の下その値が実現し、かつその値の下で手元のデータが得られ<br>
 &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
-確率(密度)を合計している
+る確率(密度)を合計している
 
 <br />
 
-(多変数ver) 確率変数 $\alpha,\beta,\sigma$ のある特定の $\alpha^{*},\beta^{*},\sigma^{*}$ における事後(同時)確率密度は
+(多変数) 確率変数 $\alpha,\beta,\sigma$ のある特定の $\alpha^{*},\beta^{*},\sigma^{*}$ における事後(同時)確率密度は
 
 $$ 
 \begin{eqnarray}
