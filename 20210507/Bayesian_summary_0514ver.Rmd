@@ -75,13 +75,13 @@ $f(\,Data\,|\,\beta=\beta^{*}\,)$ 　...　 尤度  (確率変数 $\beta$ があ
 $\int_{-\infty}^{\infty} \,f(\,Data\,|\,\beta=\beta^{real}\,)\cdot f(\,\beta=\beta^{real}\,)\,\,d\beta^{real}$
 ...　手元のデータが得られる確率(密度)であり、確率変数 $\beta$ がとり得る実現値　$\beta^{real}$ の全<br>
 &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
-てについて、事前分布の下その値が実現し、かつその値の下で手元のデータが得られる<br>
+てについて、事前分布の下その値が実現し、かつその値の下で手元のデータが得られ<br>
 &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
-確率(密度)を合計している
+る確率(密度)を合計している
 
 <br />
 
-(多変数ver) 確率変数 $\alpha,\beta,\sigma$ のある特定の $\alpha^{*},\beta^{*},\sigma^{*}$ における事後(同時)確率密度は
+(多変数) 確率変数 $\alpha,\beta,\sigma$ のある特定の $\alpha^{*},\beta^{*},\sigma^{*}$ における事後(同時)確率密度は
 
 $$ 
 \begin{eqnarray}
@@ -105,7 +105,7 @@ $$
 <br />
 
 尤度とは、あるパラメータの下で手元のデータが手に入る確率（のようなもの）である。
-1つのデータ $(x_1,y_1)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$のもとでそのデータが手に入る確率は
+1つのデータ $(x_1,y_1)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$の下でそのデータが手に入る確率は
 $$
 \begin{eqnarray}
 y_1 = \alpha^{*} + \beta^{*} x_1 + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{*}}^2)
