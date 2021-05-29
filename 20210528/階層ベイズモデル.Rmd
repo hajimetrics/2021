@@ -1,0 +1,460 @@
+---
+title: "階層ベイズモデル"
+author: "LI CHUNJIANG"
+date: "2021/5/21"
+output:
+  html_document: default
+---
+
+目次
+
+-   [1.一般化線形モデル(復習)](#anchor1)
+
+    -   確率分布、線形予測子、リンク関数
+    -   例：通常のポアソン回帰モデル（釣り獲尾数と気温、天気の関係）
+
+-   [2.階層ベイズモデル](#anchor2)
+
+    -   一般化線形混合モデル
+    -   ランダム効果、固定効果
+    -   例：釣り獲尾数と気温、天気の関係（過分散データの対応）
+
+-   [3.ランダム切片モデル](#anchor3)
+
+    -   ランダム切片効果
+    -   例：釣り獲尾数と気温、天気の関係（グループ分け）
+
+-   [4.ランダム係数モデル](#anchor4)
+
+    -   交互作用モデル
+    -   ランダム係数モデルーランダム効果の縮約（しゅくやく）
+    -   例：釣り獲尾数と気温、天気の関係（unbalanced sample）
+
+<a id="anchor1"></a>
+
+## 1.一般化線形モデル(復習)
+
+> 馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 ｐ１５４－ｐ１５５ <br>
+
+一般化線形モデルは、確率分布、線形予測子、リンク関数の三つの要素からなります。
+
+### 確率分布、線形予測子、リンク関数
+
+確率分布というのは「観測したデータを生み出す確率的な過程」。例えば、ビールの売り上げならば正規分布、工場のお菓子の量ならば正規分布、コインの表の出る確率ならば二項分布。<br>
+
+**線形予測子**というのは説明変数の線形結合。例えば、$\beta_0+\beta_1x_i$は説明変数は一つだけの線形予測子<br>
+
+リンク関数というのは被説明変数（応答変数）と線形予測子を関係づける関数。<br> 例えば、$E(Y)=\beta_0+\beta_1x_i$のとき、リンク関数はごう等関数；<br> $log(E(Y))=\beta_0+\beta_1x_i$のとき、リンク関数は対数関数。
+
+<br>
+
+### 例：通常のポアソン回帰モデル（ちょうかくびすうと気温、天気の関係）
+
+ここで、ある湖における魚の釣獲尾数のモデル化を試みます。<br> 湖で１時間釣りをした時の釣獲尾数とその日の気温と天気を一般化線形モデルで表現します。 当然、釣獲尾数は０以上しかとらない、ポアソン分布に従い、その平均値E(Y)はポアソン分布のパラメータλとなります。
+
+よって、こういうポアソン回帰モデルは以下になります。<br> $E(Y_i)=\lambda_i=exp（\beta_0+\beta_1x_{i1}+\beta_2x_{i2}）$<br>
+
+$Y_i～Poiss（E(Y_i)）$<br>
+
+対数を取れば、 $log(E(Y_i))=\beta_0+\beta_1x_{i1}+\beta_2x_{i2}$<br> $Y_i～Poiss（E(Y_i)）$<br>
+
+教科書によると、こういう変換でもあるけど、意味がある？<br> $E(Y_i)=\lambda_i=\beta_0+\beta_1x_{i1}+\beta_2x_{i2}$<br> $Y_i～Poiss（exp（E(Y_i)））$<br>
+
+**ある！これは実際の計算流れです！**<br>
+
+ここでイメージをつけると、ＭＣＭＣ法により、<br> 得られたのは$\beta_0，\beta_1，\beta_2$，これらによって$E(Y_i)$は負の値になってもおかしくない、<br> 先構築したモデルにより、expをつけると解釈できる。<br>
+
+実行してみよう<br>
+
+```{r}
+library(rstan)
+library(brms)
+
+
+rstan_options(auto_write=TRUE)
+options(mc.cores=parallel::detectCores)
+
+```
+
+```{r}
+fish_num_climate <- read.csv("4-1-1-fish-num-2.csv")
+head(fish_num_climate)
+summary(fish_num_climate)
+```
+
+散布図で釣獲尾数と気温、天気の関係を確認しましょう
+
+```{r}
+ggplot(data = fish_num_climate, 
+       mapping = aes(x = temperature, y = fish_num)) +
+  geom_point(aes(color = weather)) +
+  labs(title = "釣獲尾数と気温、天気")
+```
+
+```{r  include=FALSE}
+glm_pois_brms <- brm(
+  formula = fish_num ~ weather+temperature,  # モデル
+  family = poisson(),                          # 説明変数の従う分布
+  data = fish_num_climate,                     # データ
+  seed = 1,                                    # 乱数の種
+  prior = c(set_prior("", class = "Intercept"))# 事前分布、今回は一様分布
+)
+
+```
+
+```{r}
+glm_pois_brms
+plot(glm_pois_brms)
+
+```
+ゼロより小さい確率高いと思われる。
+
+
+ここで、天気の係数はー０．７３、どう解釈する？<br>
+
+そして、普通のポアソン回帰モデルでも大体同じ結果が出る。<br>
+
+```{r}
+model <- glm(fish_num~weather+temperature,data=fish_num_climate,family = poisson())
+print(summary(model))
+```
+
+ベイズに戻ります。 回帰分析の図示、９５％ベイズ信用区間付きのグラフは以下にる
+
+```{r}
+eff <- marginal_effects(glm_pois_brms, 
+                        effects = "temperature:weather")
+
+plot(eff, points = TRUE)
+
+```
+
+予測区間は以下になります。
+
+```{r}
+set.seed(1)
+eff_pre <- marginal_effects(glm_pois_brms, 
+                            method = "predict",
+                            effects = "temperature:weather",
+                            probs = c(0.005, 0.995))
+plot(eff_pre, points = TRUE)
+```
+
+結果だけ見れば、大丈夫かもしれないけど、もしデータの中で「計測されていないものが理由で釣獲尾数を影響する」ということがあれば、どうなる？<br> 例えば、釣り道具、釣り人の気分などのiによって違う特徴をもつデータに対して、**内生性問題**が出るかも。<br>
+
+よって、もっと複雑なモデルが必須になります。<br>
+
+<a id="anchor2"></a> \#\# ２.階層ベイズモデル \>馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 ｐ２４５－ｐ２５３ <br>
+
+階層ベイズモデルというのは階層構造を持つモデルです。<br> 　普通の階層なしのベイズモデルは説明変数＋被説明変数の確率分布、この中で説明変数は全部分かっているもの。<br> 　しかし、もしわかっていない説明変数が存在しているなら、うまく推定できない<br>。 　 　階層ベイズモデルはこれを前提として、そのわからない変数をある確率分布を仮定し、ある確率分布から生み出した実現値は分かっている説明変数となる。これを基づいて、新し説明変数たちが全部得られるになった。<br> 　 　つまり、上位の層の確率変数の実現値が下位の層の確率分布の母数となる。<br> 　 　目標は下位の層の母数の確率分布を推定すること。<br>
+
+一般化線形混合モデルは、階層ベイズモデルの具体例として、より大きな分散を持っているデータに対する改善方法です。<br>
+
+イメージをつけると、データの分散が大きいから、パラメータらの事後分布は前より幅広くなるはず。そこで、より良いモデルや予測効果が期待できる。<br>
+
+### 固定効果、ランダム効果
+
+パネルデータの個体固定効果と時間固定効果が異なるかもしれないけど、<br> ベイズ統計学の文脈で固定効果というのは、観測できる説明変数の係数、いわゆる求めているパラメータ。<br>
+
+ランダム効果は観測できない何らかの確率分布に従いランダムに変化する係数<br>
+
+### 例：ランダム効果を考えたポアソン回帰モデル
+
+魚釣り問題に戻ります。 前言った通り、魚釣りする時、釣り道具、釣り人の気分などの観測できない要素に影響されている。<br> つまり、調査ごとに変化する影響$r_i$が存在しています。これらを全部ランダムな影響とみられる。 そして、ランダムな影響は正規分布に従うと仮定する。<br>
+
+なので、ランダム効果を考えたポアソン回帰モデルは以下になる。<br> $r_i～Normal（0,\sigma_r）$<br> $log(E(Y_i))=\beta_0+\beta_1X_{i1}+\beta_1X_{i2}+r_i$<br> $Y_i～Poiss（\lambda_i）$<br>
+
+実行してみよう<br>
+
+```{r}
+fish_num_climate_2 <- read.csv("4-1-1-fish-num-2.csv")
+head(fish_num_climate_2)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+glmm_pois_brms <- brm(
+  formula = fish_num ~ weather + temperature + (1|id), # ランダム効果
+  family = poisson(),                            # 銉濄偄銈姐兂鍒嗗竷銈掍娇銇?
+  data = fish_num_climate_2,                     # 銉囥兗銈?
+  seed = 1,                                      # 涔辨暟銇ó
+  prior = c(set_prior("", class = "Intercept"),
+            set_prior("", class = "sd"))         # 鐒℃儏鍫变簨鍓嶅垎甯冦伀銇欍倠
+)
+```
+
+```{r}
+glmm_pois_brms
+plot(glmm_pois_brms)
+
+
+```
+
+**係数が変わった。**<br> これは当然、遺漏変数みたいな感じだから、元の説明変数は内生性の問題が存在している。<br> 例えば、気温の係数をみると、普通のポアソン回帰モデルは0.06、解釈は天気が晴れると、釣獲尾数はexp（0.06）上がる。<br> 混合モデルで0.07、より大きくなった。<br> つまり、この固定効果と気温の負の相関があって、気温の係数を過小評価しまった。<br> 例えば、気温が上がると、釣り人の気分が悪くなったり、釣獲尾数が下がっていく。<br> でも、こういう関係は普通のポアソン回帰モデルで工夫されなかったから、<br> この効果が全部気温の係数に反映されちゃった。<br>
+
+**そして、係数（パラメータ）の分散も大きくなった。**<br>どうして？？
+
+これはデータの分散に従う調整だ。<br> つまり、実際のデータの分散は想定された分散より確かに大きいだよね<br>
+
+```{r}
+eff <- conditional_effects(glmm_pois_brms,effects = "temperature:weather")
+plot(eff, points = TRUE)
+
+
+```
+
+```{r}
+set.seed(1)
+eff_pre <- marginal_effects(glmm_pois_brms, 
+                            method = "predict",
+                            effects = "temperature:weather",
+                            probs = c(0.005, 0.995))
+plot(eff_pre, points = TRUE)
+```
+
+これは改善なしってこと？<br> ちょっと見にくいかもしれない、予測効果を見てみましょう<br>
+
+```{r}
+#普通のモデルは
+brms::pp_check(glm_pois_brms, nsamples = 20)
+#混合モデルは
+brms::pp_check(glmm_pois_brms, nsamples = 20)
+
+```
+
+色の濃い線で描かれたのが実際に観測されたデータ、<br> 薄い線で描かれているのがモデルから生成された乱数です，20回。<br> ピタッと重なっているわけではありませんが、かなり改善してきたようです。<br>
+
+これで、混合モデルが評価されるといってもいいでしょう<br>
+
+参考：<https://das-kino.hatenablog.com/entry/2018/12/15/230938>
+
+<a id="anchor3"></a>
+
+## 3.ランダム切片モデル
+
+> 馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 ｐ２５４－ｐ２５９ <br>
+
+### ランダム切片効果
+
+今まではすべてのデータに対してランダム効果を考えた。<br> もし、今回の調査は人それぞれに何回も行われて、こういうランダム効果を考えれば、人それぞれの能力などによって異なる効果ですね。<br>
+
+ランダム切片モデルというのは「グループに異なるランダム効果」を与えるモデルです。<br>
+
+つまり、こういうランダム効果はすべてのデータに対して異なるじゃなくて、異なるグループは異なるランダム効果があることです。<br>
+
+抽象的に考えれば、このモデルによって得られた回帰曲線はグループ別の自分なりの曲線になるはずです。<br>
+
+### 例：釣り獲尾数と気温、天気の関係（グループ分け）
+
+前例は調査ごとに変化する影響$r_i$が存在と仮定された。<br>
+
+今回は釣り人ごとに複数回の調査を行い、グループ別を分析し、<br> つまり、釣り人ごとに変化する影響$r_k$を見つけたい。<br>
+
+グループ分けのランダム効果を考えたポアソン回帰モデルは以下になります。<br> $r_k～Normal（0,\sigma_r^2）$<br> $log(E(Y_i))=\beta_0+\beta_1X_{i1}+\beta_1X_{i2}+r_k$<br> $Y_i～Poiss（\lambda_i）$<br>
+
+イメージとしては釣りのうまいひとの$r_k$と釣りの下手のひとの$r_k$と異なって、<br> 切片$\beta_0$のように被説明変数を影響を与える。<br>
+
+実行してみよう
+
+```{r include=FALSE}
+fish_num_climate_3 <- read.csv("4-2-1-fish-num-3.csv")
+head(fish_num_climate_3,)
+
+glmm_pois_brms_human <- brm(
+  formula = fish_num ~ weather+temperature + (1|human),
+  family = poisson(),
+  data = fish_num_climate_3,
+  seed = 1,
+  prior = c(set_prior("", class = "Intercept"),
+            set_prior("", class = "sd"))
+)
+
+```
+
+```{r}
+plot(glmm_pois_brms_human)
+glmm_pois_brms_human
+```
+
+回帰曲線をみると、
+
+```{r}
+conditions <- data.frame(
+  human = c("A","B","C","D","E","F","G","H","I","J"))
+
+eff_glmm_human <- marginal_effects(
+  glmm_pois_brms_human,
+  effects = "temperature:weather",
+  re_formula = NULL,
+  conditions = conditions)
+
+plot(eff_glmm_human, points = TRUE)
+
+```
+
+以下は人それぞれの切片
+
+```{r}
+ranef(glmm_pois_brms_human)
+
+```
+
+パラメータの係数の正負は変わらないけど、人によってかなり差があることはわかった。<br>
+
+質問が出てくる人もいると思うけど、切片モデルなのに、どうして釣り人別の係数も変わったの？<br>
+
+実はこのモデルで得られた切片は$E(Y_i)=\beta_0+\beta_1X_{i1}+r_k$<br>の式に対しての切片、負の値が出る。<br>
+
+係数を説明する際に、expをつけると、形も変化する。<br>
+
+図で説明していく。
+
+要するに、このモデルはより細かい分析が必要だったら、役に立ちます。例えば、性別や年齢を分けの効果。<br>
+
+<a id="anchor4"></a> \#\# ４.ランダム係数モデルーunbalanced data \>馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社 ｐ２５４－ｐ２５９ <br>
+
+問題がもっと複雑になってきた。<br> 今は気温と釣り人は釣獲尾数に対する影響の交互作用を分析したい、<br> つまり、違う釣り人に対して、気温の変化は釣獲尾数に対する影響は変化がある。<br>
+
+その前に、交互作用モデルを紹介していきます。<br>
+
+交互作用というのは二つ以上の説明変数の組み合わせが被説明変数に与える影響です。<br> 式から見れば、<br> $log(E(Y_i))=\beta_0+\beta_1X_{i1}+\beta_1X_{i2}+\beta_3X_{i1}X_{i2}$<br> この中で、$\beta_3$は交互作用、$\beta_２$,$\beta_１$は主効果。<br>
+
+イメージをつけると、釣り人それぞれの気温と釣獲尾数の回帰曲線が出るはずだよね。<br>
+
+しかし、データの中である人の調査が他の人より少なかった。この時どうなるだろう。<br>
+
+### 交互作用モデルとunbalanced dataの問題
+
+```{r include=FALSE}
+fish_num_climate_4 <- read.csv("4-3-1-fish-num-4.csv")
+head(fish_num_climate_4)
+
+glm_pois_brms_interaction <- brm(
+  formula = fish_num ~ temperature * human,
+  family = poisson(),
+  data = fish_num_climate_4,
+  seed = 1,
+  prior = c(set_prior("", class = "Intercept"))
+)
+
+```
+
+```{r}
+glm_pois_brms_interaction
+
+```
+
+これは交互作用、Jさんを見て、主作用＋交互作用はマイナスになっちゃた。
+
+```{r}
+conditions <- data.frame(
+  human = c("A","B","C","D","E","F","G","H","I","J"))
+
+# 鍥崇ず
+eff_1 <- marginal_effects(glm_pois_brms_interaction,
+                          effects = "temperature",
+                          conditions = conditions)
+plot(eff_1, points = TRUE)
+
+```
+
+で、他の人に対して気温が釣獲尾数に与える影響は正だったけど、Jさんだけ影響は負だった。<br> ちょっとおかしいと気がするね。<br>
+
+### ランダム係数モデルモデルとunbalanced dataの解決
+
+じゃあ、どうすればいい？<br>
+
+まず、交互作用を先に置いておく<br>
+
+前はグループ分けのランダム効果つまり、ランダム切片効果をこのunbalanced　dataで実行してみよう<br>
+
+```{r include=FALSE}
+glmm_pois_brms_human2 <- brm(
+  formula = fish_num ~ temperature + (1|human),
+  family = poisson(),
+  data = fish_num_climate_4,
+  seed = 1,
+  prior = c(set_prior("", class = "Intercept"),
+            set_prior("", class = "sd"))
+)
+
+```
+
+```{r}
+glmm_pois_brms_human2
+
+conditions <- data.frame(
+  human = c("A","B","C","D","E","F","G","H","I","J"))
+
+# 鍥崇ず
+eff_1 <- marginal_effects(glmm_pois_brms_human2,
+                          effects = "temperature",
+                          re_formula=NULL,
+                          conditions = conditions)
+plot(eff_1, points = TRUE)
+
+```
+
+```{r}
+ranef(glmm_pois_brms_human2)
+
+```
+
+Jさんはみんなと同じトレンドになったね。見にくいかもしれないけど、切片は若干違いあがあるはず<br> なぜなら、ランダム切片効果はみんなの固定効果は同じと認識されて、ただ異なる切片が存在しているわけだ。<br>
+
+これはランダム効果の縮約と呼ばれる（しゅくやく）、つまり、全体から説得力を利用する。<br>
+
+しかし、今はランダム切片効果を考えただけ、交互作用を考えると、ランダム係数モデルが必要になる。<br>
+
+$\tau_k～Normal（0,\sigma_\tau^2）$<br> $r_k～Normal（0,\sigma_r^2）$<br> $log(E(Y_i))=\beta_0+（\beta_1＋\tau_k）X_{i1}+r_k$<br> $Y_i～Poiss（\lambda_i）$<br>
+
+これで釣り人によって、異なる係数$\tau_k$も付けた。<br>
+
+実行してみよう<br>
+
+```{r include=FALSE}
+# 銉┿兂銉€銉犱總鏁般儮銉囥儷
+glmm_pois_brms_keisu <- brm(
+  formula = fish_num ~ temperature + (temperature||human),
+  family = poisson(),
+  data = fish_num_climate_4,
+  seed = 1,
+  iter = 6000,
+  warmup = 5000,
+  control = list(adapt_delta = 0.97, max_treedepth = 15)
+)
+
+```
+
+```{r}
+# 鍙傝€冿細鎺ㄥ畾绲愭灉
+glmm_pois_brms_keisu
+
+# 鍙傝€冿細銉堛儸銉笺偣銉椼儹銉冦儓銇仼
+plot(glmm_pois_brms_keisu)
+
+```
+
+```{r}
+conditions <- data.frame(
+  human = c("A","B","C","D","E","F","G","H","I","J"))
+
+# 鍥崇ず
+eff_2 <- marginal_effects(glmm_pois_brms_keisu,
+                          re_formula = NULL,
+                          effects = "temperature",
+                          conditions = conditions)
+plot(eff_2, points = TRUE)
+
+
+
+```
+
+今回Jさんはみんなとおなじなった、しかも気温と釣り人の交互作用も明らかになった。<br> つまり、釣り人によって、気温が釣獲尾数に与える影響はかなり違うようね。<br>
+
+```{r}
+ranef(glmm_pois_brms_keisu)
+
+```
+
+釣り人それぞれは異なる切片と交互作用を持っているよね。

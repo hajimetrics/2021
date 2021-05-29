@@ -1,0 +1,982 @@
+---
+title: "線形回帰モデルのベイジアン推定"
+author: ""
+date: "2021/5/7"
+output: 
+  html_document:
+    toc: TRUE
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+<br />
+<br />
+
+## **単純線形回帰モデル**
+
+<br />
+<br />
+
+以下の真のモデルを考える。
+$$
+y_i = \alpha^{true} + \beta^{true} x_i + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{true}}^2)
+$$
+<div style="text-align: right;">　</div>
+
+<br />
+
+ベイジアンは、係数 $\alpha^{true} , \beta^{true}$ について確率変数 $\alpha,\beta$ の実現値、つまり「確率分布から実現した値」と考える。
+<br />
+
+この値は当然誰にもわからないため、事前分布（prior distribution）と尤度（likelihood ; データより算出）を基に $\alpha,\beta$ が従う確率分布を計算することで、確率変数 $\alpha,\beta$ について、どの値が「実現しやすいか」を明らかにする。
+<br />
+
+この計算後の確率分布は一般的に事後分布（posterior distribution）と呼ばれる。
+<br />
+
+ここで、 $\epsilon_i$ について分布が仮定されていることに注意。さらにその標準偏差 $\sigma^{true}$ も推測したいため、確率変数 $\sigma$ の実現した値として考える。
+
+<br />
+<br />
+
+### 確率分布(＝事後確率密度関数)がなぜ計算できるのか？
+
+<br />
+
+ベイズの定理により式としては簡単に導出可能。
+
+(1変数) 確率変数 $\beta$ のある特定の $\beta^{*}$ における事後確率密度は
+
+<br />
+
+$$ 
+\begin{eqnarray}
+f(\,\beta=\beta^{*}\,|\,Data\,) &=& \frac{ \,f(\,Data\,|\,\beta=\beta^{*}\,) \cdot f(\,\beta=\beta^{*}\,)}{f(Data)}\\ 
+\\
+&=& \frac{f(\,Data\,|\,\beta=\beta^{*}\,) \cdot f(\,\beta=\beta^{*}\,)}{\int_{-\infty}^{\infty} \,f(\,Data\,|\,\beta=\beta^{real}\,) \cdot f(\,\beta=\beta^{real}\,)\,\,d\beta^{real}} 
+\end{eqnarray}
+$$
+
+<br />
+
+ここで
+<br />
+
+$f(\,\beta=\beta^{*}\,)$ 　...　 事前確率密度  (データ取得前の確率変数 $\beta$ のある特定の $\beta^{*}$ における確率密度)
+<br />
+
+$f(\,Data\,|\,\beta=\beta^{*}\,)$ 　...　 尤度  (確率変数 $\beta$ がある特定の値 $\beta^{*}$ をとるときの手元のデータが得られる確率(密度))
+<br />
+
+$\int_{-\infty}^{\infty} \,f(\,Data\,|\,\beta=\beta^{real}\,)\cdot f(\,\beta=\beta^{real}\,)\,\,d\beta^{real}$
+...　手元のデータが得られる確率(密度)であり、確率変数 $\beta$ がとり得る実現値　$\beta^{real}$ の全<br>
+&emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
+てについて、事前分布の下その値が実現し、かつその値の下で手元のデータが得られ<br>
+&emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &nbsp;
+る確率(密度)を合計している
+
+<br />
+
+(多変数) 確率変数 $\alpha,\beta,\sigma$ のある特定の $\alpha^{*},\beta^{*},\sigma^{*}$ における事後(同時)確率密度は
+
+$$ 
+\begin{eqnarray}
+f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,|\,Data\,) &=& \frac{ \,f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,)}{f(Data)}\\ 
+\\
+&=& \frac{f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,)}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,) \cdot f(\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,)\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}
+\end{eqnarray}
+$$
+<br />
+<br />
+
+## **推定してみる**
+<br />
+
+
+
+### **1. 尤度**
+<br />
+
+まずは尤度を考える。
+<br />
+
+尤度とは、あるパラメータの下で手元のデータが手に入る確率（のようなもの）である。
+1つのデータ $(x_1,y_1)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$の下でそのデータが手に入る確率は
+$$
+\begin{eqnarray}
+y_1 = \alpha^{*} + \beta^{*} x_1 + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{*}}^2)
+\end{eqnarray}
+$$
+より
+$$
+\begin{eqnarray}
+\epsilon_i =\,\, &y_1 - (\alpha^{*} + \beta^{*} x_1)& \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{*}}^2)\\
+\\
+&y_1 - (\alpha^{*} + \beta^{*} x_1)& \,\sim Normal\,(0,{\sigma^{*}}^2)\\
+\end{eqnarray}
+$$
+よって
+$$
+\begin{eqnarray}
+f((x_1,y_1)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}) = \frac{1}{\sqrt{2\pi}\sigma^{*}} \, \exp\left[-\frac{\{y_1-(\alpha^{*} + \beta^{*} x_1) -0\}^2}{2{\sigma^{*}}^2}\right]
+\end{eqnarray}
+$$
+<br />
+
+これが「尤度」となる。($\alpha^{*},\beta^{*},\sigma^{*}$ を色々変えることで尤度関数が手に入る)
+<br />
+<br />
+<br />
+
+同様に、$N$個の独立なデータ $(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)$ が手に入ったとき、$\alpha = \alpha^{*},\beta=\beta^{*},\sigma = \sigma^{*}$ のもとでそのデータが手に入る確率はそのデータが手に入る確率は
+<br />
+
+$$
+\begin{eqnarray}
+f((x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}) &=& f((x_1,y_1)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*})\cdot f((x_2,y_2)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*})\cdot \,\, ... \,\\
+\\
+&=& \prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{*}} \, \exp\left[-\frac{\{y_i-(\alpha^{*} + \beta^{*} x_i)-0\}^2}{2{\sigma^{*}}^2}\right]
+\end{eqnarray}
+$$
+<br />
+
+$N$個のデータの場合はこれが「尤度」になる。
+<br />
+<br />
+<br />
+
+### **2. 事前分布**
+<br />
+
+次に「事前分布」（事前確率密度関数）を考える。
+<br/>
+<br/>
+<br/>
+
+#### **2-1. 事前分布の設定の考え方**
+
+
+基本的には、「事前分布」には分析前の時点で $\alpha,\beta$ が従うと考えられる確率分布を設定すべきである。
+<br />
+
+一方で、その設定には注意が必要である。<br>
+というのも、尤度と相性の悪い事前分布を設定すると事後確率密度の式
+$f(\,\beta=\beta^{*}\,|\,Data\,)= \frac{f(\,Data\,|\,\beta=\beta^{*}\,) \cdot f(\,\beta=\beta^{*}\,)}{\int_{-\infty}^{\infty} \,f(\,Data\,|\,\beta=\beta^{real}\,) \cdot f(\,\beta=\beta^{real}\,)\,\,d\beta^{real}}$
+が複雑になりすぎてしまい、分母の積分をClosed Formにできないのである。この場合、MCMCが必要になる。
+
+<br />
+
+
+豊田 編著(2015)によると設定には2つの方針がある。
+<br />
+<br />
+
+
+**①「自然共役事前分布 (Conjugated Prior Distribution)」**
+<br />
+
+こちらは事後分布の計算のしやすさを重視する方針である。
+この場合、事後分布が「知っている分布」になるため、MCMCをせずともその期待値、最頻値などがすぐに求まるというメリットがある。<br>
+(MCMC（特にHMC法）が簡単にできる現在において求めやすい事後分布にする必要性は無いともいえるが)
+<br />
+
+| 尤度 | 自然共役事前分布  |  事後分布      |
+| :---: | :---: | :---: |
+| 正規分布(平均)  | 正規分布 |  正規分布      |
+| 正規分布(分散)  | 逆ガンマ分布 |　逆ガンマ分布  |
+| ベルヌーイ分布  | ベータ分布 |　ベータ分布  |
+| 2項分布  | ベータ分布 |　ベータ分布  |
+| ポアソン分布  | ガンマ分布 |　ガンマ分布  |
+
+<div style="text-align: right;"> *出所:豊田 編著(2015)をもとに発表者が作成* </div>
+<br />
+
+今回の場合　→　正規分布の平均をモデル化し尤度を計算しているので事前分布に正規分布？
+<br />
+<br />
+<br />
+
+**②「無情報事前分布 (Non-informative Prior Distribution)」**
+<br />
+
+①の方針は、「事後分布が求めやすいように」事前分布を設定するという点で恣意的だという批判がある。Box and Tiao(1973) によって事後分布にできるだけ影響を与えない事後分布を設定するという考え方が提案された。
+<br />
+<br />
+
+例: $(-\infty,\infty)$ の一様分布
+<br />
+<br />
+
+・どんな分布？
+
+一般に、$(a,b)$ の一様分布に従う $\beta$ の確率密度関数は、
+
+$$
+f(\beta=\beta^{*}) = \frac{1}{b-a} = \, C \, (定数)
+$$
+
+```{r, echo=FALSE,warning=FALSE,fig.align='center'}
+
+##　一様分布の確率密度関数
+library(ggplot2)
+x <- seq(-120,120,0.1)
+y <- dunif(x,min=-100,max=100)
+d <- data.frame(value=x,density=y)
+g <- ggplot(d,aes(x=value,y=density)) + geom_line() + ggtitle("Uniform(a,b) a=-100,b=100")
+plot(g)
+
+```
+
+ここで $a \to -\infty, \, b \to \infty$ とすると
+
+$$
+f(\beta = \beta^{*}) = \,C\, = \lim_{a\to -\infty, b\to \infty}\frac{1}{b-a} = \,0
+$$
+<br />
+
+となり確率密度がどこでも $0$ になってしまう。（ →変則分布(Improper Distribution)）
+<br />
+
+事前確率密度がどこでも $0$ のとき、事後確率密度もどこでも $0$ &emsp; ($\because 事後確率密度の分子 = 尤度 ×事前確率密度$) <br>
+→　尤度の情報が消えてしまう
+<br />
+
+この問題に対処するには
+<br />
+
+- $C$ を $0$ ではなくとてもとても小さな値 $\delta$ とみなす。
+<br />
+
+- $(a,b)$ の一様分布で、十分に小さな $a$ 、十分に大きな $b$ を設定。 &emsp;（例: $a=-10000,\, b=10000,\, C=\frac{1}{20000}$）
+<br />
+<br />
+
+前者は積分して1にならない(無限大になる)点に注意 (手続き上問題はない)。後者の方針の方が数理的に破綻が無いとされる。
+<br />
+
+いずれにしてもその区間がパラメータの定義域を全て覆うような一様分布を事前分布として用いた時の事後確率密度関数(確率変数$\sigma$は省略)は、
+
+$$ 
+\begin{eqnarray}
+f(\,\alpha=\alpha^{*},\beta=\beta^{*}\,|\,Data\,) &=& \frac{ \,f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*}\,)}{f(Data)}\\ 
+\\
+&=& \frac{f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*}\,)}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real}\,) \cdot f(\,\alpha=\alpha^{real},\beta=\beta^{real}\,)\,\,d\alpha^{real}\,d\beta^{real}} \\
+\\
+&=& \frac{f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,) \cdot C}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real}\,) \cdot C\,\,d\alpha^{real}\,d\beta^{real}}\\
+\\
+&=& \frac{C \cdot f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,)}{C \cdot \int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real}\,)\,d\alpha^{real}\,d\beta^{real}}\\
+\\
+&=& \frac{f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,)}{ \int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real}\,)\,d\alpha^{real}\,d\beta^{real}}\\
+\\
+&\propto& f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*}\,)
+\end{eqnarray}
+$$
+<br />
+となり、完全に尤度に比例する。 ($\therefore カーネル = 尤度$)
+
+豊田 編著(2015)では、「公的」な分析に関しては一般に広く認められた事前信念がない限りこうした情報の少ない事前分布を使うべきとしている。（一様分布のほか、コーシー分布、半コーシー分布など）
+<br />
+<br />
+<br />
+
+#### **2-2. 今回のモデルにおける事前分布**
+<br />
+
+事前分布が3変量確率分布であることに注意。
+<br />
+
+確率変数 $\alpha,\beta$ ... $(a,b)$ の一様分布を採用（ただし、$a$はとても小さい値、$b$はとても大きい値）
+<br />
+
+確率変数 $\sigma$ ... $(0,b)$ の一様分布を採用（ただし、$b$はとても大きい値）
+<br />
+
+→　範囲内においてどこでも密度は　$C=\frac{1}{(b-a)^2b}$ で一定
+<br />
+<br />
+
+
+$\left(C=\frac{1}{(b-a)^2b}\, の証明\right)$
+$$
+\begin{eqnarray}
+\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} f(\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,)\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real} &=& 1\\
+\\
+\int_{0}^{b}\int_{a}^{b}\int_{a}^{b} C\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real} &=& 1\\
+(\because \,\, f(\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,) &=& C \,(一定))\\\
+\\
+C \cdot \int_{0}^{b}\int_{a}^{b}\int_{a}^{b} 1\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real} &=& 1\\
+\\
+C \cdot \int_{0}^{b}\int_{a}^{b} [\alpha^{real}]_a^b \,\,d\beta^{real}\,d\sigma^{real} &=& 1\\
+\\
+C \cdot \int_{0}^{b}\int_{a}^{b} (b-a) \,\,d\beta^{real}\,d\sigma^{real} &=& 1\\
+\\
+C \cdot (b-a)\int_{0}^{b} [\beta^{real}]_a^b \,\,d\sigma^{real} &=& 1\\
+\\
+C \cdot (b-a)\int_{0}^{b} (b-a) \,\,d\sigma^{real} &=& 1\\
+\\
+C \cdot (b-a)^2 \,\, [\sigma^{real}]_0^b  &=& 1\\
+\\
+C \cdot (b-a)^2b &=& 1\\
+\\
+C &=& \frac{1}{(b-a)^2b}
+\end{eqnarray}
+$$
+<br />
+<br />
+<br />
+
+
+```{r,include=FALSE}
+# 3dplot for multivariate-Uniform
+# library(rgl)
+# x <- seq(-120,120,0.1)
+# y <- x
+# zf <- function(x,y) {
+#   1/400 + (x+y) - (x+y)
+# }
+# z <- outer(x,y,zf)
+# par3d(windowRect=c(400,200,1000,1000))
+# persp3d(alpha_real,beta_real,likelihoods[,,12],col="red")
+```
+
+
+
+
+
+### **3. カーネルの計算**
+<br />
+
+$N$個の独立なデータ $(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)$ が手に入ったときのカーネルは、
+
+$$ 
+\begin{eqnarray}
+f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,|\,Data\,) 
+&\propto&  \,f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,)\\ 
+\\
+&\fallingdotseq& f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot C \\
+\\
+&\propto&  \,f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,)\\
+\\
+&=& f((x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*})\\
+\\
+&=& \prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{*}} \, \exp\left[-\frac{\{y_i-(\alpha^{*} + \beta^{*} x_i)-0\}^2}{2{\sigma^{*}}^2}\right]\\
+\\
+&=& \prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{*}} \, \exp\left[-\frac{(y_i - \alpha^{*} - \beta^{*} x_i)^2}{2{\sigma^{*}}^2}\right]\\
+\\
+\end{eqnarray}
+$$
+<br />
+<br />
+
+（参考）事後確率密度関数は、
+
+$$ 
+\begin{eqnarray}
+f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,|\,Data\,) 
+&=&  \frac{f(\,Data\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot f(\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,)}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,Data\,|\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,) \cdot f(\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,)\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}\\ 
+\\
+&=& \frac{f(\,(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) \cdot C}{C \cdot \int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,) \,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}\\
+\\
+&=& \frac{f(\,(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{*},\beta=\beta^{*},\sigma=\sigma^{*}\,) }{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \,f(\,(x_1,y_1),(x_2,y_2),\,...\, ,(x_N,y_N)\,|\,\alpha=\alpha^{real},\beta=\beta^{real},\sigma=\sigma^{real}\,) )\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}\\
+\\
+&=& \frac{\prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{*}} \, \exp\left[-\frac{(y_i - \alpha^{*} - \beta^{*} x_i)^2}{2{\sigma^{*}}^2}\right]}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{real}} \, \exp\left[-\frac{(y_i - \alpha^{real} - \beta^{real} x_i)^2}{2{\sigma^{real}}^2}\right]\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}
+\end{eqnarray}
+$$
+<br />
+<br />
+<br />
+
+
+### **4. データを使った推定（MCMCしない）**
+<br />
+
+**疑似データ**
+<br />
+
+真の値 $\alpha^{true}=6,\beta^{true}=2,\sigma^{true}=3$ のモデルから $(x_1,x_2,...,x_{100}) \sim Uniform(-10,10)$ の下で $(y_1,y_2,...,y_{100})$ を発生させる。
+<br />
+
+```{r}
+set.seed(5)
+x_obs <- runif(100,-10,10)
+y_obs <- 6 + 2*x_obs + rnorm(100,0,3)
+d <- data.frame(x=x_obs,y=y_obs)
+head(d)
+g_s <- ggplot(d,aes(x=x,y=y)) + geom_point() + ggtitle("observation")
+plot(g_s)
+
+```
+<br />
+<br />
+
+**事前分布**
+<br />
+
+事前分布の一様分布において、便宜上$a=-10000,b=10000$とする。
+```{r}
+density_c <- 1/(20000*20000*10000)
+
+alpha_real <- seq(-10,10,0.1)
+prior_a <-  rep(density_c,length(alpha_real))
+plot(alpha_real,prior_a)
+
+beta_real <- seq(-10,10,0.1)
+prior_b <-  rep(density_c,length(beta_real))
+plot(beta_real,prior_b)
+
+sigma_real <- seq(0.1,10,0.1)
+prior_s <-  rep(density_c,length(sigma_real))
+plot(sigma_real,prior_s)
+
+prior_ab <- matrix(density_c,nrow=length(alpha_real),ncol=length(beta_real))
+```
+
+$\alpha,\beta$ の2次元で見ると
+```{r,warning=FALSE,message=FALSE}
+library(plotly)
+```
+
+```{r}
+fig <- plot_ly(x=~beta_real,y=~alpha_real, z=~prior_ab) %>% layout(scene=list(zaxis=list(nticks=4,range=c(0,1/2000000000000))))
+fig <- fig %>% add_surface()
+fig
+```
+<br />
+<br />
+
+**尤度関数**
+```{r}
+#likelihood function
+likelihood_f <- function(alpha,beta,sigma){
+  return(prod(dnorm(y_obs-alpha-beta*x_obs,mean=0,sd=sigma)))
+}
+
+likelihoods <- array(0,dim=c(length(alpha_real),length(beta_real),length(sigma_real)))
+kernels <- array(0,dim=c(length(alpha_real),length(beta_real),length(sigma_real)))
+
+for (i in 1:length(alpha_real)){
+  for (j in 1:length(beta_real)) {
+    for (k in 1:length(sigma_real)) {
+      likelihoods[i,j,k] <- likelihood_f(alpha_real[i],beta_real[j],sigma_real[k])
+      kernels[i,j,k] <- likelihoods[i,j,k]*density_c
+    }
+  }
+}
+```
+<br />
+<br />
+
+**尤度・カーネルの「最大値」と「最大値になるパラメータの値（MAP推定値＝最大事後確率推定値）」**
+<br />
+
+```{r}
+print(likelihoods[which.max(likelihoods)])
+print(kernels[which.max(kernels)])
+print(which(likelihoods==likelihoods[which.max(likelihoods)],arr.ind = TRUE))
+print(which(kernels==kernels[which.max(kernels)],arr.ind = TRUE))
+print(alpha_real[160])
+print(beta_real[121])
+print(sigma_real[29])
+
+map_idx <- which(likelihoods==likelihoods[which.max(likelihoods)],arr.ind = TRUE)
+```
+<br />
+
+MAP推定値で切り出したプロット
+<br />
+
+```{r}
+
+d <- data.frame(alpha=alpha_real,density=kernels[,map_idx[2],map_idx[3]])
+g_a <- ggplot(d,aes(x=alpha,y=density)) + geom_line() + ggtitle("alpha kernel")
+plot(g_a)
+
+d <- data.frame(beta=beta_real,density=kernels[map_idx[1],,map_idx[3]])
+g_b <- ggplot(d,aes(x=beta,y=density)) + geom_line() + ggtitle("beta kernel")
+plot(g_b)
+
+d <- data.frame(sigma=sigma_real,density=kernels[map_idx[1],map_idx[2],])
+g_s <- ggplot(d,aes(x=sigma,y=density)) + geom_line() + ggtitle("sigma kernel")
+plot(g_s)
+```
+
+```{r}
+fig_2 <- plot_ly(x=~beta_real,y=~alpha_real,z=~kernels[ , ,map_idx[3]]) 
+fig_2 <- fig_2 %>% add_surface()
+fig_2
+
+fig_3 <- plot_ly(x=~sigma_real,y=~beta_real,z=~kernels[map_idx[1], , ])
+fig_3 <- fig_3 %>% add_surface()
+fig_3
+
+fig_4 <- plot_ly(x=~sigma_real,y=~alpha_real,z=~kernels[ ,map_idx[2], ])
+fig_4 <- fig_4 %>% add_surface()
+fig_4
+```
+
+<br />
+<br />
+
+**事後周辺分布(正規化してないのでもどき)**
+
+<br />
+```{r,message=FALSE,warning=FALSE}
+md_a <- rep(0,length(alpha_real))
+for (i in 1:length(alpha_real)){
+  sum(kernels[i,,]) -> md_a[i]
+}
+fig_5 <- plot_ly(x=~alpha_real,y=md_a)
+fig_5
+
+md_b <- rep(0,length(beta_real))
+for (i in 1:length(beta_real)){
+  sum(kernels[,i,]) -> md_b[i]
+}
+fig_6 <- plot_ly(x=~beta_real,y=md_b)
+fig_6
+
+md_s <- rep(0,length(sigma_real))
+for (i in 1:length(sigma_real)){
+  sum(kernels[,,i]) -> md_s[i]
+}
+fig_7 <- plot_ly(x=~sigma_real,y=md_s)
+fig_7
+
+print(alpha_real[which.max(md_a)])
+print(beta_real[which.max(md_b)])
+print(sigma_real[which.max(md_s)])
+```
+
+
+```{r}
+
+md_ab <- matrix(0,nrow=length(alpha_real),ncol=length(beta_real))
+for (i in 1:length(alpha_real)){
+  for (j in 1:length(beta_real)){
+    sum(kernels[i,j,]) -> md_ab[i,j]
+  }
+}
+fig_8 <- plot_ly(x=~beta_real,y=~alpha_real,z=~md_ab)
+fig_8 <- add_surface(fig_8)
+fig_8
+```
+
+
+
+
+**最小二乗法による推定値**
+<br />
+
+```{r}
+d <- data.frame(x=x_obs,y=y_obs)
+g_s <- ggplot(d,aes(x=x,y=y)) + geom_point() + ggtitle("observation")
+plot(g_s)
+
+ols <- lm(y~x,data=d)
+print(summary(ols))
+print(sqrt(sum((ols$residuals)^2)/98))
+```
+<br />
+<br />
+<br />
+
+
+### **5. データを使った推定（stanによるMCMC）**
+<br />
+<br />
+
+#### **5-1. パラメータ推定**
+
+```{r,warning=FALSE,message=FALSE}
+library(rstan)
+library(bayesplot)
+
+#rstan_options(auto_write = TRUE)
+options(mc.core = parallel::detectCores())
+```
+<br />
+<br />
+
+**以下の通り「simple_reg_0507.stan」ファイルを作成**
+
+```Stan
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+}
+
+
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+
+
+model {
+  y ~ normal(alpha + beta*x, sigma);
+}
+
+```
+<br />
+<br />
+
+ここで`model`ブロックについて、
+$$
+y_i = \alpha^{true} + \beta^{true} x_i + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{true}}^2)\\
+$$
+より
+$$
+y_i \sim Normal\,(\,\alpha^{true} + \beta^{true} x_i\,,\,{\sigma^{true}}^2\,)\\
+\\
+(\because \,\, y_i\,|\alpha^{true}\,,\beta^{true}\,,x_i \,\,\sim Normal\,(\,\alpha^{true} + \beta^{true} x_i\,,\,{\sigma^{true}}^2\,))
+$$
+と変形して記述することに注意。
+<br />
+
+また、事前分布は「幅の広い一様分布」を採用するので、何も指定しない。
+<br />
+<br />
+
+
+listを作る
+<br />
+
+```{r}
+data_list <- list(
+  N = 100,
+  y = y_obs,
+  x = x_obs
+)
+```
+<br />
+<br />
+
+MCMCを実行
+<br />
+
+```{r,warning=FALSE}
+mcmc_result <- stan(
+  file = "simple_reg_0507.stan",
+  data = data_list,
+  seed = 1,
+  chains = 4,
+  warmup = 1000,
+  iter = 2000,
+  thin = 1
+)
+```
+<br />
+<br />
+
+結果とMCMCサンプルの抽出
+<br />
+```{r}
+print(mcmc_result, probs = c(0.025,0.5,0.975))
+mcmc_sample <- rstan::extract(mcmc_result,permuted=FALSE)
+```
+<br />
+<br />
+
+トレースプロットと事後分布
+<br />
+```{r}
+mcmc_combo(
+  mcmc_sample,
+  pars = c("alpha","beta","sigma")
+)
+```
+<br />
+<br />
+<br />
+
+#### **5-2. 事後予測**
+<br />
+<br />
+
+##### **条件付き予測分布** 
+<br />
+<br />
+
+通常の単回帰モデルの予測
+$$
+\hat{y_{next}}  = \hat{\alpha} +  \hat{\beta}x_{next}
+$$
+$\hat{\alpha} , \hat{\beta}$ ... $\alpha^{true} , \beta^{true}$ の点推定値
+$x_{next}$ ... $y_{next}$ の予測に用いる $x$ の値
+<br />
+<br />
+
+ベイズ推定でも、事後中央値や事後平均値を点推定値として、こうした点予測をすることは可能
+<br />
+
+EAP(sample_mean)推定値による点予測
+<br />
+
+```{r}
+x_next = c(-9.5,8,12,1,5.5)
+alpha_hat <- mean(mcmc_sample[,,"alpha"])
+beta_hat <- mean(mcmc_sample[,,"beta"])
+sigma_hat <- mean(mcmc_sample[,,"sigma"])
+
+y_next_hatp <- alpha_hat + beta_hat*x_next
+fig_10 <- plot_ly(x=x_obs,y=y_obs,name='observation',type="scatter",mode ='markers') 
+fig_10 <- fig_10 %>% add_trace(x=x_next,y=y_next_hatp,name='point_predict',type="scatter",mode ='lines+marker')
+fig_10
+```
+
+
+<br />
+
+さらにベイジアンは誤差項に分布を仮定するので「予測分布」を出せる 
+→　条件付き予測分布(Conditional Predictive Distribution)
+<br />
+<br />
+
+これにより「95％予測区間(Prediction Interval)」が出せる
+<br />
+<br />
+
+条件付き予測分布の期待値は
+$$
+E\left[\hat{y_{next}}\right | \,\hat{\alpha},\hat{\beta}\,,\hat{\sigma}\,]  = \hat{\alpha} +  \hat{\beta}x_{next}
+$$
+<br />
+
+条件付き予測分布は平均 $\hat{\alpha}+\hat{\beta}x_{next}$, 分散 $\hat{\sigma}$ の正規分布
+<br />
+
+つまり、条件付き予測分布において、$\hat{y_{next}}$ がある特定の値 $y^{*}$ をとる確率密度は
+$$
+f(\hat{y_{next}} = y^{*}| \,\hat{\alpha},\hat{\beta},\hat{\sigma},x_{next}\,) = \frac{1}{\sqrt{2\pi}\hat{\sigma}} \, \exp\left[-\frac{\,\{y^{*} - (\hat{\alpha} +  \hat{\beta}x_{next}) \}^2}{2{\hat{\sigma}^2}}\right]
+$$
+<br />
+
+```{r,warning=FALSE}
+x_next = c(-9.5,8,12,1,5.5)
+upp_96pi = rep(0,5)
+low_96pi = rep(0,5)
+ 
+for (i in 1:length(x_next)){
+  yhat_range <- seq(alpha_hat+beta_hat*x_next[i]-6,alpha_hat+beta_hat*x_next[i]+6,0.1)
+  yhat_prob <- dnorm(x=yhat_range,mean=alpha_hat+x_next[i]*beta_hat,sd=sigma_hat)
+  
+  low_96pi[i] <- qnorm(0.05,mean=alpha_hat+x_next[i]*beta_hat,sd=sigma_hat)
+  upp_96pi[i] <- qnorm(0.95,mean=alpha_hat+x_next[i]*beta_hat,sd=sigma_hat)
+  
+  fig <- plot_ly(x=yhat_range,y=~yhat_prob) %>% 
+    layout(title = paste('x_next =',as.character(x_next[i]),
+                         ',95%PI=[',as.character(round(low_96pi[i],digits = 4)),
+                         as.character(round(upp_96pi[i],digits = 4)),'],',
+                         'PP =',as.character(round(alpha_hat+x_next[i]*beta_hat,digits = 4))))
+}
+fig
+
+```
+
+
+```{r,message=FALSE,warning=FALSE}
+fig_12 <- fig_10 %>% 
+  add_trace(x=x_next,y=low_96pi,name='lower_95PI',type="scatter",mode ='lines+marker',line=list(color = 'yellow', width=2, dash='dot')) %>%
+  add_trace(x=x_next,y=upp_96pi,name='upper_95PI',type="scatter",mode ='lines+marker',line=list(color = 'yellow', width=2, dash='dot')) %>% 
+  layout(title= 'Point Prediction and 95% Prediction Interval')
+
+fig_12
+```
+
+
+
+##### **事後予測分布** 
+<br />
+<br />
+
+パラメータの点推定値だけでなく分布が手に入る　→　予測においてもこの分布の情報を活用したい
+<br />
+<br />
+
+パラメータの分布を考慮したうえで導出する予測分布 → 事後予測分布(Posterior Predictive Distribution)
+<br />
+<br />
+
+（実現値 $\alpha^{real},\beta^{real},\sigma^{real}$ の下で $\hat{y_{next}}$ が $y^{*}$　をとる確率密度）×　(その $\alpha^{real},\beta^{real},\sigma^{real}$ が実現する確率密度 (=事後確率密度) ）をすべての $\alpha^{real},\beta^{real},\sigma^{real}$
+について足し合わせる
+<br />
+
+→　$\hat{y_{next}}$ が $y^{*}$　をとる確率密度が出てくるはず
+
+$$
+\begin{eqnarray}
+f(\hat{y_{next}} = y^{*}|Data,x_{next}) &=& \int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \underset{\hat{y_{next}} = y^{*}となる条件付き確率密度}{\underline{f(\hat{y_{next}} = y^{*}| \,\alpha^{real},\beta^{real},\sigma^{real}\,,x_{next})}}\cdot 
+\underset{事後確率密度}{\underline{f(\,\alpha = \alpha^{real},\,\beta = \beta^{real},\,\sigma = \sigma^{real}|\,Data\,)}}\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}\\
+\\
+\\
+&=& \int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \frac{1}{\sqrt{2\pi}\sigma^{real}} \, \exp\left[-\frac{\,(y^{*}-\alpha^{real}-\beta^{real}x_{next})^2}{2{{\sigma^{real}}^2}}\right]\cdot 
+\frac{\prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{real}} \, \exp\left[-\frac{(y_i - \alpha^{real} - \beta^{real} x_i)^2}{2{\sigma^{*}}^2}\right]}{\int_{-\infty}^{\infty}\int_{-\infty}^{\infty}\int_{-\infty}^{\infty} \prod_{i=0}^{N}\frac{1}{\sqrt{2\pi}\sigma^{real}} \, \exp\left[-\frac{(y_i - \alpha^{real} - \beta^{real} x_i)^2}{2{\sigma^{real}}^2}\right]\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}}\,\,d\alpha^{real}\,d\beta^{real}\,d\sigma^{real}
+\end{eqnarray}
+$$
+<br />
+
+→　非常に複雑なので、こちらの事後予測分布も乱数をサンプリングすることで推測する
+<br />
+<br />
+
+
+**事後予測分布の推測の流れ**
+<br />
+
+- MCMCにより$(\alpha^{real},\beta^{real},\sigma^{real})$ セットを4000組(ここは`iter`,`chains`次第だが)得ているはず
+<br />
+
+  → (事後確率密度関数の近似に対応)
+<br />
+
+- 予測用の $x_{next}$ について、4000組それぞれに $\alpha^{real} + \beta^{real}x_{next}$ を計算 ($x_{next}$ は固定)
+<br />
+
+- 正規分布の乱数発生プログラムを用いて、$Normal(\alpha^{real} + \beta^{real}x_{next},{\sigma^{real}}^2)$ を1組につき1つ発生させ,予測値　$\hat{y_{next}}$　とする
+<br />
+
+  → (条件付き密度関数の近似に対応)
+<br />
+
+- 得られた4000個の予測値　$\hat{y_{next}}$ でヒストグラムを描き、$x_{next}$ による $y_{next}$ の予測分布とする
+<br />
+<br />
+
+実際にこの手続きを行うには、「.stan」ファイルを
+
+```Stan
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+  
+  int N_p;            //予測するデータ(x)の数
+  vector[N_p] x_next; //予測に用いるxのベクトル
+}
+
+
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+
+
+model {
+  y ~ normal(alpha + beta*x, sigma);
+}
+
+generated quantities{
+  vector[N_p] y_next_hat; 　//yの予測値
+  
+  y_next_hat = normal_rng(alpha + beta*x_next, sigma);
+  //Normal(alpha + beta*x_next, sigma)から乱数を発生
+  //それをyの予測値とする
+}
+
+
+```
+
+と変更する必要がある
+<br />
+
+（変更後のファイルは「simple_reg_pred_0507.stan」として新しく保存）
+<br />
+<br />
+
+**`generated quantities` ブロックについて**
+<br />
+
+モデルによる予測値など、「モデル・パラメータの推定には必要ないが別の目的で乱数を得たい object」を定義する。
+<br />
+
+
+data_list
+```{r}
+data_list_pred <- list(
+  N = 100,
+  y = y_obs,
+  x = x_obs,
+  N_p = 5,
+  x_next = c(4,8,12,1,5.5)
+)
+```
+<br />
+
+mcmcの実行
+```{r}
+mcmc_result_pred <- stan(
+  file = "simple_reg_pred_0507.stan",
+  data = data_list_pred,
+  seed = 1
+)
+```
+<br />
+
+結果（95％予測区間）
+```{r}
+mcmc_intervals(
+  mcmc_result_pred,
+  regex_pars = c("y_next_hat."),
+  prob=0.8,
+  prob_outer=0.95
+)
+```
+<br />
+
+結果（予測分布）
+```{r}
+mcmc_areas(
+  mcmc_result_pred,
+  pars = c("y_next_hat[1]","y_next_hat[5]"),
+  prob=0.6,
+  prob_outer=0.99
+)
+```
+<br />
+<br />
+<br />
+
+### **6. brmsによるお手軽推定**
+
+```{r,warning=FALSE,message=FALSE}
+library(brms)
+
+df <- data.frame(x_obs,y_obs)
+
+simple_lm_brms <- brm(
+  formula = y_obs~x_obs,
+  family = gaussian(link="identity"),  #期待値はalpha+beta*x,誤差項は正規分布
+  data = df,
+  seed=1
+)
+
+plot(simple_lm_brms)
+
+#pred
+new_df <- data.frame(x_obs = 10.5)
+set.seed(1)
+predict(simple_lm_brms,new_df)
+```
+<br />
+<br />
+<br />
+
+### **参考文献** 
+<br />
+<br />
+
+豊田秀樹 編著(2015)「基礎からのベイズ統計学・ハミルトニアンモンテカルロ法による実践的入門」朝倉書店、第3章
+馬場 真哉(2019)「実践Data Scienceシリーズ RとStanではじめる ベイズ統計モデリングによるデータ分析入門」講談社、第3部第2章、第3部第3章
+
+
+
+
+
+
