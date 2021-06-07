@@ -1,0 +1,1050 @@
+---
+title: "メトロポリス・ヘイスティングス法"
+author: "Sihan Wang"
+date: "5/8/2021"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(mvtnorm)
+```
+MCMCランダムサンプリングの各手法について詳しく見ていきます. 
+
+## マルコフ連鎖: 定常分布への収束
+**推移行列$\bf A$を知っている状態で, どんな定常分布$p(\cdot)$に収束するのか求めたい. **
+
+一般的な確率過程$X^{(t)}$
+
+$$
+p(X^{(t)} | X^{(t-1)}, X^{(t-2)}, \cdots, X^{(1)})
+$$
+マルコフ連鎖は今期の状態が1期前の状態のみに依存するような確率過程です. 
+
+$$
+p(X^{(t)} | X^{(t-1)}, X^{(t-2)}, \cdots, X^{(1)}) = p(X^{(t)} | X^{(t-1)})
+$$
+
+|  | 紋 | 縞 | 玉 |
+| :---: | :---: | :---: | :---: |
+| 紋 | 0.3 | 0.3 | 0.4 |
+| 縞 | 0.1 | 0.5 | 0.4 |
+| 玉 | 0.2 | 0.6 | 0.2 |
+
+```{r transition-kernel} 
+#表4.2　遷移核
+A <- matrix(c(0.3, 0.3, 0.4,
+              0.1, 0.5, 0.4,
+              0.2, 0.6, 0.2
+              ),
+            nrow = 3, ncol = 3, byrow = TRUE
+            )
+rownames(A) <- c("紋","縞","玉")
+colnames(A) <- c("紋","縞","玉")
+print(A)
+```
+
+初期状態${\bf p^{(1)}}$, 遷移(推移)行列${\bf A}$とします. 
+
+$$\begin{eqnarray}
+経済統計では行列を使っていたので見慣れていると思います \\
+{\bf p^{(1)}} &=& \left(
+    \begin{array}{ccc}
+      p(X^{(1)}=紋) & p(X^{(1)}=縞) & p(X^{(1)}=玉)
+    \end{array}
+  \right) \\ 
+  &=& \left(
+    \begin{array}{ccc}
+      0.6 & 0.25 & 0.15
+    \end{array}
+  \right) \\
+{\bf A} &=& 
+  \left(
+    \begin{array}{ccc}
+      p(X^{(t)}=紋|X^{(t-1)}=紋) & p(X^{(t)}=紋|X^{(t-1)}=縞) & p(X^{(t)}=紋|X^{(t-1)}=玉) \\
+      p(X^{(t)}=縞|X^{(t-1)}=紋) & p(X^{(t)}=縞|X^{(t-1)}=縞) & p(X^{(t)}=縞|X^{(t-1)}=玉) \\
+      p(X^{(t)}=玉|X^{(t-1)}=紋) & p(X^{(t)}=玉|X^{(t-1)}=縞) & p(X^{(t)}=玉|X^{(t-1)}=玉) \\
+    \end{array}
+  \right) \\
+  &=& \left(
+    \begin{array}{ccc}
+      0.3 & 0.3 & 0.4 \\
+      0.1 & 0.5 & 0.4 \\
+      0.2 & 0.6 & 0.2
+    \end{array}
+  \right) \\
+{\bf p^{(2)}} &=& {\bf p^{(1)}}{\bf A} \\
+{\bf p^{(t)}} &=& {\bf p^{(t-1)}}{\bf A} \\
+要素ごとに個別にみると \\
+p(X^{(t)}=紋) &=&  
+p(X^{(t)}=紋|X^{(t-1)}=紋)p(X^{(t-1)}=紋) + 
+p(X^{(t)}=紋|X^{(t-1)}=縞)p(X^{(t-1)}=縞) + 
+p(X^{(t)}=紋|X^{(t-1)}=玉)p(X^{(t-1)}=玉) \\
+p(X^{(t)}=j) &=& \sum_{i=1}^{3}p(X^{(t)}=j|X^{(t-1)}=i)p(X^{(t-1)}=i)
+\end{eqnarray}$$
+
+ちなみに$p(X^{(t)}=j) = \sum_{i=1}^{3}p(X^{(t)}=j|X^{(t-1)}=i)p(X^{(t-1)}=i)$が成り立つのは当たり前です(全確率の公式). これがマルコフ連鎖だからです(${\bf p^{(t)}} = {\bf p^{(t-1)}}{\bf A}$). この式は最初の方のまだ収束しているとは言えないバーンイン期間でも成り立っています. 
+
+```{r Markov-Chain} 
+# 期間
+t <- 10
+
+# 遷移行列
+P <- matrix(0, t, 3)
+# 初期状態の確率分布
+p1 <- matrix(c(0.6, 0.25, 0.15), 1, 3)
+
+# マルコフ連鎖
+iter <- matrix(0, t, 1)
+p <- P[1,] <- p1
+
+for(i in 2:t){
+  p <- P[i,] <- p %*% A 
+}
+
+df <- P %>% data.frame()
+colnames(df) <- c("紋", "縞", "玉")
+df["t"] <- df %>% row.names()
+
+temp <- melt(df,
+             id="t",
+             measure=c("紋", "縞", "玉"))
+
+# プロット
+# https://qiita.com/hotoku/items/312f472f34fc5be895f3
+fig1 <- temp %>% ggplot(aes(x = t, 
+                    y = value,
+                    color = variable,
+                    group = variable)) +
+  geom_point() + 
+  geom_line() + 
+  xlab("期間") + 
+  ylab("確率") + 
+  ylim(0, 1) +
+  ggtitle("マルコフ連鎖 確率分布の推移")
+
+df
+fig1
+```
+
+定常分布は${\bf p} = (\frac{1}{6}, \frac{1}{2}, \frac{1}{3})$くらいですね. 
+
+```{r plot stationary distribution }
+barplot(df[length(df), 1:3] %>% as.numeric(), names.arg = colnames(df)[1:3], ylim = c(0, 1))
+```
+
+## マルコフ連鎖: 詳細つり合い条件
+**収束する先である定常分布$\bar p(\cdot)$を知っている状態で, どんな推移行列$\bf A$かを求めたい. **
+**($\bf A$がわかれば, $\bar p(\cdot)$に従う乱数が作れる!)**
+
+同じ確率過程の隣り合った2つの時点の確率変数$X$, $X'$がそれぞれ$X=i$, $X'=j$で, 異なる状態をとるとします. 遷移核は知りませんが定常分布$\bar p(\cdot)$は知っているのでとりあえず$X$( $X'$)が収束している様子を式で表すと以下のようになります. 
+
+$$\begin{eqnarray}
+  \bar p(X'=j) &=& \sum_i {\rm Pr}(X'=j|X=i)\bar p(X=i) \ {\rm for \ all} \ j \\
+  (\bar p(X=i) &=& \sum_j {\rm Pr}(X=i|X'=j)\bar p(X'=j) \ {\rm for \ all} \ i) \\
+  なじみのある行列で書くと, \\
+  {\bf p^{(\infty)}} &=& {\bf p^{(\infty)}}{\bf A} \\
+\end{eqnarray}$$
+
+$\bar p(X'=j) = \sum_i {\rm Pr}(X'=j|X=i)\bar p(X=i)$の意味は, 仮に分布が収束し今期と1期後で分布が変化しない($\bar  p(・)=\bar  p(・)$)としたとき, 遷移核${\rm Pr}(X'=j|X=i)$に成り立つ条件式です. 
+
+ある意味で未知の遷移核についての方程式です. つまり, 分布が変化しないように制約をかけた全確率の公式です. 
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+<全確率の公式の意味>
+
+1期後にある状態$j$となる確率(左辺)
+$$
+p(X'=j)
+$$
+は, 今期のあらゆる状態となるそれぞれの確率
+$$
+p(X=i), i=1, 2, \dots
+$$
+について, 各状態$i=1,2,\dots$から状態$j$へと遷移する確率${\rm Pr}(X'=j|X=i)$を考慮した平均(右辺)
+$$\sum_i {\rm Pr}(X'=j|X=i)p(X=i), i=1,2,\dots
+$$
+と等しい. (マルコフ連鎖のベクトルと行列の掛け算${\bf p}{\bf A}$の部分)
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+$$\begin{eqnarray}
+  \overbrace{p(X'=j)}^{確率分布p(・)は一定} &=& \overbrace {\sum_i p(X'=j|X=i)}^{未知の遷移核}\overbrace{p(X=i)}^{確率分布p(・)は一定} {\rm for \ all} \ j \\
+  行列で表すと \\
+  \overset{確率分布p(・)は一定}{{\bf p}} &=& \overset{確率分布p(・)は一定}{{\bf p}} \overset{未知の遷移行列}{{\bf A}}
+\end{eqnarray}$$
+
+この関係が成り立つための十分条件は, 
+
+$$\begin{eqnarray}
+  p(X=i|X'=j)p(X'=j) &=& p(X'=j|X=i)p(X=i) \\
+\end{eqnarray}$$
+
+これが詳細つり合い条件となります. 証明は以下の通りです. 
+
+$$\begin{eqnarray}
+  p(X=i|X'=j)p(X'=j) &=& p(X'=j|X=i)p(X=i) \\
+  両辺をiに関して和をとる \\
+  \sum_i p(X=i|X'=j)p(X'=j) &=& \sum_i p(X'=j|X=i)p(X=i) \\
+  p(X'=j)\overbrace {\sum_i p(X=i|X'=j)}^{周辺化して1} &=& \sum_i p(X'=j|X=i)p(X=i) \\
+  p(X'=j) &=& \sum_i p(X'=j|X=i)p(X=i) \\
+\end{eqnarray}$$
+
+ちなみに, 詳細つり合い条件が意味していることは, 分布が収束したならば(定常分布は何かは知っている)「今期$X=i$ &rarr; 1期後$X'=j$に遷移する量$p(X'=j|X=i)p(X=i)$」と「1期前$X'=j$ &rarr; 今期$X=i$に遷移する量$p(X=i|X'=j)p(X'=j)$」は同じ, ということです. 1ステップ中の$i \rightarrow j$の移動量と$j \rightarrow i$の移動量があらゆる状態$(i, j)$間で等しいような遷移核があればその確率変数は収束する, というのが直感的な意味です. 
+
+```{r detailed balace condition image discrete}
+barplot(df[length(df), 1:3] %>% as.numeric(), names.arg = colnames(df)[1:3], ylim = c(0, 1))
+text(1.9,0.59,"p(縞)",cex=1.0)
+text(3.1,0.4,"p(玉)",cex=1.0)
+add <- 0.1
+arrows(3.25,0.08,2.2,0.38,lty=1,lwd=1.8)
+arrows(2.2,0.38+add,3.25,0.08+add,lty=1,lwd=1.8)
+text(2.70,0.15,"p(玉|縞)",cex=1.0)
+text(2.70,0.45,"p(縞|玉)",cex=1.0)
+```
+
+$$\begin{eqnarray}
+  \overbrace{p(X=i|X'=j)p(X'=j)}^{j \rightarrow i の移動量} &=& \overbrace{p(X'=j|X=i)p(X=i)}^{i \rightarrow j の移動量} \\
+\end{eqnarray}$$
+
+もしこの詳細つり合い条件を満たすような遷移核が見つかれば, この遷移核に従う乱数を生成することで, 収束分布に従う乱数をジェネレートできるってわけです. 
+
+**乱数ジェネレートまでのプロセスのイメージ**
+
+* 各要素が詳細つり合い条件$p(X=i|X'=j)p(X'=j) = p(X'=j|X=i)p(X=i)$を満たす遷移核である遷移行列$\bf A$を発見する.
+* 適当な状態, $a^0$を遷移行列${\bf A}$にくぐらせる(提案分布から乱数発生する)と確率分布$p(\cdot)$に少し従った$a^1$が出てくる.
+* 更に$a^1$を遷移行列${\bf A}$にくぐらせると...というふうに繰り返すと, ある時からずっと確率分布$p(\cdot)$に従った状態が出続けるようになる. 
+
+ちなみに, $X$と$X'$のどっちが今期でどっちが1期後かは重要ではありません. 
+
+<例題>
+
+定常分布は${\bf \bar p} = (\frac{1}{6}, \frac{1}{2}, \frac{1}{3})$でした. 定常分布を元に詳細つり合い条件を満たす遷移核を何とかして見つけておきました. 確かめてみてください. 
+
+|  | 紋 | 縞 | 玉 |
+| :---: | :---: | :---: | :---: |
+| 紋 | 0.3 | 0.3 | 0.4 |
+| 縞 | 0.1 | 0.5 | 0.4 |
+| 玉 | 0.2 | 0.6 | 0.2 |
+
+この遷移核を用いて, 定常分布に従う乱数を作ってみましょう. 
+
+```{r RNG with detailed balance condition}
+# Generating random number with transition matrix which satisfies detailed balance condition
+# 離散ネタばれ遷移核(提案分布)
+
+set.seed(0)
+
+p = c(1/6, 1/2, 1/3) # 目的分布 (定常分布)
+A <- matrix(c(0.3, 0.3, 0.4, 0.1, 0.5, 0.4, 0.2, 0.6, 0.2), nrow = 3, ncol = 3, byrow = TRUE) # 提案分布 (遷移核)
+
+a <- c()
+accept <- 0
+
+# 初期値設定
+a_0 <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+             size = 1,
+             replace = TRUE,
+             prob = c(1/3, 1/3, 1/3) # 初期値は適当でいいよね?
+             )
+
+a <- a %>% append(a_0)
+
+for (i in 1:10000) {
+  # 1期前の値を基に提案分布P( |t-1)を特定し, 提案分布から乱数発生
+  if (a[length(a)] == 1) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[1, ]  # P( |紋) # 完璧な提案分布
+                  )
+  } else if (a[length(a)] == 2) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[2, ]  # P( |縞) # 完璧な提案分布
+                  )
+  } else {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[3, ]  # P( |玉) # 完璧な提案分布
+                  )
+  }
+  # 詳細つり合い条件の判定(満たしていなかったらrejectするか, もったいないなら確率補正して採用)
+  if (near(A[a[length(a)], a_t] * p[a[length(a)]], A[a_t, a[length(a)]] * p[a_t], tol=0.01)) { 
+    # 詳細つり合い条件満たすかどうか(満たしている遷移核使ってるから満たすに決まってる)
+    a <- a %>% append(a_t)
+    accept <- accept + 1
+  } else {
+    # 仮に満たしていないのであれば確率補正する
+    print("確率補正する. ")
+  }
+}
+
+acceptance_rate = accept / 10000
+acceptance_rate
+
+# simulated stationary distribution
+# 完璧な提案分布に従う乱数を発生させたら, 目的分布に従う乱数となる. p(|)もp()も一緒だしな. 
+p_sim <- c((a==1) %>% mean(), (a==2) %>% mean(), (a==3) %>% mean())
+p_sim
+
+# true stational distribution
+p
+```
+
+今まで離散の話でしたが, 実際に求めるパラメータ$\theta$は連続値です. 定常分布を確率質量関数$p(\cdot)$の代わりに確率密度関数$f(\cdot)$を使うと$\theta$が定常分布に収束する様子は以下の式で表されます. 
+
+$$\begin{eqnarray}
+  f(\theta') &=& \int f(\theta'|\theta)f(\theta) \ {\rm for \ any} \ \theta' \\
+  (f(\theta) &=& \int f(\theta|\theta')f(\theta') \ {\rm for \ any} \ \theta) \\
+\end{eqnarray}$$
+
+上の式が成り立ち, 定常分布に収束するための条件は, 詳細つり合い条件でした. 
+
+$$\begin{eqnarray}
+  f(\theta|\theta')f(\theta') &=& f(\theta'|\theta)f(\theta)
+\end{eqnarray}$$
+
+離散との違いは, 定常分布はベクトル$\bf p$ではなく確率密度関数$f(\theta)$となり, 遷移核については行列$A$としては存在せず未知の関数$f(\theta'|\theta)$で表されることになります. 
+
+行列の行と列を細かくしていくイメージです. 
+
+|  | $\cdots$ | $\theta'$ | $\cdots$ |
+| :---: | :---: | :---: | :---: |
+| $\vdots$ | $\cdots$ | $\cdots$ | $\cdots$ |
+| $\theta$ | $\cdots$ | $f(\theta'|\theta)$ | $\cdots$ |
+| $\vdots$ | $\cdots$ | $\cdots$ |$\cdots$ |
+
+
+```{r detailed balace condition image continuous}
+curve(dgamma(x, 6, 3),0,5,ylab='',xlab='',cex.axis=1.5,cex.lab=2.0,lwd=2.5)
+segments(2,0.02,2,dgamma(2, 6, 3),lty=2)
+segments(3.5,0.02,3.5,dgamma(3.5, 6, 3),lty=2)
+text(1.75,0.45,"f(θ')",cex=1.0)
+text(3.73,0.11,"f(θ)",cex=1.0)
+add<-0.1
+arrows(3.25,0.08,2.2,0.38,lty=1,lwd=1.8)
+arrows(2.2,0.38+add,3.25,0.08+add,lty=1,lwd=1.8)
+text(2.75,0.10,"f(θ'|θ): 大",cex=1.0)
+text(2.70,0.45,"f(θ|θ'): 小",cex=1.0)
+text(2.0,0,"θ'",cex=1.0)
+text(3.5,0,"θ",cex=1.0)
+```
+
+詳細つり合い条件の意味をもっと意味を考えてみましょう. 今まで離散では確率変数が取りうる値は決まっていました($X = \{紋, 縞, 玉\}$). 一方, 連続である$\theta$に値の範囲はありません$(-\infty, \infty)$. なので, 乱数をジェネレートする際最初の値は本当に適当に選んでくるしかありません. でも適当な値から始めても詳細つり合い条件を満たすような遷移核に最初の適当な値を通し続けて遷移していけば, 段々収束した分布に尤もらしく従った乱数が出てくるようになります. その理由は, 詳細つり合い条件を比でみればわかります. 
+
+$$\begin{eqnarray}
+  f(\theta|\theta')f(\theta') &=& f(\theta'|\theta)f(\theta) \\
+  \frac {f(\theta|\theta')} {f(\theta'|\theta)} &=& \frac {f(\theta)} {f(\theta')} \\
+  \overset{\thetaの率密度} {f(\theta)} : \overset{\theta'の確率密度} {f(\theta')} &=& 1 : a \\
+  \overset{\theta' \rightarrow \theta の遷移確率} {f(\theta|\theta')} : \overset{\theta \rightarrow \theta' の遷移確率} {f(\theta'|\theta)} &=& 1 : a \\
+\end{eqnarray}$$
+
+例えば$\theta'$がジェネレートされやすい定常分布の中心付近の値$\theta'=2$とし, $\theta$をジェネレートされにくい定常分布の周辺部の値$\theta'=3.5$だとします. $a=5$だとすると, $\theta'$は$\theta$より$5$倍ジェネレートされやすいことになります. このとき$\theta \rightarrow \theta'$の遷移は$\theta' \rightarrow \theta$の遷移よりも$5$倍くらい起きやすいということになります. 
+
+```{r detailed balace condition image continuous 2}
+curve(dgamma(x, 6, 3),0,5,ylab='',xlab='',cex.axis=1.5,cex.lab=2.0,lwd=2.5)
+segments(2,0.02,2,dgamma(2, 6, 3),lty=2)
+segments(3.5,0.02,3.5,dgamma(3.5, 6, 3),lty=2)
+text(1.75,0.45,"定常分布の中心, θより5倍生成されやすい",cex=1.0)
+text(3.73,0.11,"定常分布の端, θ'より1/5, 生成されにくい",cex=1.0)
+add<-0.1
+arrows(3.25,0.08,2.2,0.38,lty=1,lwd=1.8)
+arrows(2.2,0.38+add,3.25,0.08+add,lty=1,lwd=1.8)
+text(2.75,0.2,"θ'->θの移動する確率は5倍高い",cex=1.0)
+text(2.70,0.3,"θ'->θの移動する確率は1/5倍低い",cex=1.0)
+text(2.0,0,"θ'",cex=1.0)
+text(3.5,0,"θ",cex=1.0)
+```
+
+$\theta$がもっと定常分布の裾の方$\theta=10$なら$a=10000$くらいになり, $\theta \rightarrow \theta'$の遷移は$\theta' \rightarrow \theta$の遷移よりも$10000$倍くらい起きやすくなります. 
+
+```{r detailed balace condition image continuous 3}
+curve(dgamma(x, 6, 3),0,10,ylab='',xlab='',cex.axis=1.5,cex.lab=2.0,lwd=2.5)
+segments(2,0.02,2,dgamma(2, 6, 3),lty=2)
+text(1.75,0.45,"定常分布の中心, θより10000倍生成されやすい",cex=1.0)
+text(10,0.05,"定常分布の端, θ'より1/10000, 生成されにくい",cex=1.0)
+add<-0.1
+arrows(10,0.08,2.2,0.38,lty=1,lwd=1.8)
+arrows(2.2,0.38+add,10,0.08+add,lty=1,lwd=1.8)
+text(8,0.4,"θ'->θの移動する確率は10000倍高い",cex=1.0)
+text(4,0.2,"θ'->θの移動する確率は1/10000倍低い",cex=1.0)
+text(2.0,0,"θ'",cex=1.0)
+text(10,0,"θ",cex=1.0)
+```
+
+つまり, 最初に定常分布=事後分布でめったにジェネレートされないようなデタラメな値から始めても, 詳細つり合い条件を満たしている遷移核$f(|)$に通して遷移をすれば, 事後分布でジェネレートされやすい値が出てくる確率密度が高いので, すぐに事後分布中心付近の値が出るようになります. 
+
+## メトロポリス・ヘイスティングス法 (Metropolis-Hastings: MH))
+
+知っている事後分布$f(\theta|D)$に対して, 詳細つり合い条件を満たすような遷移核$f(|)$(条件付確率分布)を一発で解析的に見つけることは難しいです. そこで, まずは詳細つり合い条件を満たさない適当な遷移核$q(|)$を提案分布として代用します. 提案分布から乱数を発生させることは「目的分布に従ってそうなサンプリング」をすることになります. $q(|)$は乱数発生が簡単な正規分布などから選びます. 
+
+$q(|)$は必ずしも詳細つり合い条件を満たしていないので, たとえば
+
+$$
+  q(\theta|\theta')f(\theta') > q(\theta'|\theta)f(\theta)
+$$
+
+のように等号が成り立ちません. この場合は$\frac{q(\theta|\theta')}{q(\theta'|\theta)} >  \frac{f(\theta|\theta')}{f(\theta'|\theta)}$なので, $\theta' \rightarrow \theta$の確率が$\theta \rightarrow \theta'$の確率と比べて, 本来よりも大きくなってしまっていることになります. もちろん不等号が逆な場合も考えられますが, $\theta$と$\theta'$を逆にすれば一般性を失わないのでどっちでもいいです. ここでは不等号を$>$で統一します. 
+
+この適当な遷移核$q(|)$を, 詳細つり合い条件を満たす遷移核$f(|)$に向けて確率的補正する方法がメトロポリス・ヘイスティングス法です. ちなみに, 確率的補正は$q(|)$が確率分布で確率についてなので, 補正するときも確率をかけて補正してあげます. ある補正確率で(想像)
+
+それでは$q(|)$を補正します. まずは符号が正の未知の補正係数$c, c'$を使います
+
+$$\begin{eqnarray}
+  cq(\theta|\theta') &=& f(\theta|\theta')\\
+  c'q(\theta'|\theta) &=& f(\theta'|\theta)\\
+補正後は \\
+  cq(\theta|\theta')f(\theta') &=& c'q(\theta'|\theta)f(\theta) \\
+\end{eqnarray}$$
+
+これで詳細つり合い条件が成り立ちました. でもやりたいのは確率的補正です. $c, c' > 0$だと確率に正の数かけてるだけで意味が分かりません. それに$c, c'$と2つ用意するのも少し無駄です. そこで両辺を$c'$で割ります. 
+
+$$\begin{eqnarray}
+  \frac{c}{c'} q(\theta|\theta')f(\theta') &=& \frac{c'}{c'} q(\theta'|\theta)f(\theta) \\
+  \frac{c}{c'} = r とおく \\
+  r &=& \frac{q(\theta'|\theta)f(\theta)} {q(\theta|\theta')f(\theta')} \\
+  r' &=& 1 \\
+\end{eqnarray}$$
+
+$r$は$q(\theta|\theta')f(\theta') > q(\theta'|\theta)f(\theta)$なので$0 < r < 1$となり補正係数を確率として扱えるようになります. 補正後の提案分布の詳細つり合い条件は以下のようになります. 
+
+$$\begin{eqnarray}
+  rq(\theta|\theta')f(\theta') &=& r'q(\theta'|\theta)f(\theta) \\
+\end{eqnarray}$$
+
+つまり, 提案分布$q(\theta|\theta')$から乱数$a$が提示されたら$a$を$r < 1$で次の遷移核$q(|a)$として使うために受容・破棄し, 提案分布$q(\theta'|\theta)$から提示されたら次の遷移核として確率$r' = 1$で絶対受容していけば, 提案分布から発生した乱数はだんだん目的分布$f(\cdot)$に従うようになります. 乱数の具合によって不等号が逆転し得るので, その都度判定し, $q(\theta|\theta')$か$q(\theta'|\theta)$かをチェックする必要があります. 
+
+---
+
+**メトロポリス・ヘイスティングス アルゴリズム**
+
+* 初期値$\theta^{(0)}$を設定します. 
+
+* 提案分布$q(|\theta^{(0)})$を用意して, 乱数$a^{(1)}$を発生(遷移)させます.   
+  この提案分布$q(|\theta^{(0)})$を補正し, その補正確率で乱数$a^{(1)}$を受容するか否かを決めます. 
+
+  * 次のステートメントの`TRUE` or `FALSE`をチェックします.   
+    $q(a^{(1)}|\theta^{(0)})f(\theta^{(0)}) > q(\theta^{(0)}|a^{(1)})f(a^{(1)})$
+
+    * `if TRUE`  
+      $q(\theta|\theta')f(\theta') > q(\theta'|\theta)f(\theta)$と  
+      $q(a^{(1)}|\theta^{(0)})f(\theta^{(0)}) > q(\theta^{(0)}|a^{(1)})f(a^{(1)})$を見比べると, $\theta = a^{(1)}, \theta' = \theta^{(0)}$なので,   
+      $\theta^{(0)} \rightarrow a^{(1)}$の遷移確率は$q(a^{(1)}|\theta^{(0)}) = q(\theta|\theta')$で, 提案分布は$q(|\theta^{(0)}) = q(|\theta')$です.   
+      ($q(|a^{(1)}) = q(|\theta)$はここでは関係ありません. )  
+      提案分布$q(|\theta')$は確率$r$で確率補正します.   
+      確率$r = \frac{q(\theta^{(0)}|a^{(1)})f(a^{(1)})} {q(a^{(1)}|\theta^{(0)})f(\theta^{(0)})} =  \frac{q(\theta'|\theta)f(\theta)} {q(\theta|\theta')f(\theta')}$で$q(|\theta^{(0)}) = q(|\theta')$を遷移核として採用し, 乱数$a^{(1)}$は正式な遷移核$q(|\theta^{(0)}) = q(|\theta')$から発生( 遷移)したことになるので, この過程の乱数として受容し, $\theta^{(1)} = a^{(1)}$とします.   
+      確率$1-r$で$q(|\theta^{(0)}) = q(|\theta')$は遷移核として棄却され, 乱数$a^{(1)}$を破棄して$\theta^{(1)} = \theta^{(0)}$とします. 
+
+    * `if FALSE`  
+      $q(\theta|\theta')f(\theta') > q(\theta'|\theta)f(\theta)$と  
+      $q(\theta^{(0)}|a^{(1)})f(a^{(1)}) > q(a^{(1)}|\theta^{(0)})f(\theta^{(0)})$を見比べると, $\theta' = a^{(1)}, \theta = \theta^{(0)}$なので,   
+      $\theta^{(0)} \rightarrow a^{(1)}$の遷移確率は$q(a^{(1)}|\theta^{(0)}) = q(\theta'|\theta)$で, 提案分布は$q(|\theta^{(0)}) = q(|\theta)$です.   
+      ($q(|a^{(1)}) = q(|\theta')$はここでは関係ありません. )  
+      提案分布$q(|\theta)$は確率$r'$で確率補正します.   
+      確率$r' = 1$で$q(|\theta^{(0)}) = q(|\theta)$を遷移核として採用し, 乱数$a^{(1)}$は正式な遷移核$q(|\theta^{(0)}) = q(|\theta)$から発生(遷移)したことになるので, この過程の乱数として受容し, $\theta^{(1)} = a^{(1)}$とします.   
+      事実上補正はしません. 
+
+* 提案分布$q(|\theta^{(1)})$から乱数$a^{(2)}$を発生させます.   
+  ...
+* 提案分布$q(|\theta^{(t)})$から乱数$a^{(t+1)}$を発生させます. 
+
+---
+
+MHアルゴリズムは結局のところ以下のように簡単に表現できます. 
+
+---
+
+**MH アルゴリズム 簡略版**
+
+* 初期値$\theta^{(0)}$を設定します. 
+
+* 提案分布$q(|\theta^{(0)})$を用意して, 乱数$a^{(1)}$をdraw.   
+
+  * 確率$\min(1, r)でa^{(1)}$を受容する($\theta^{(1)} = a^{(1)}$). さもなくば現状維持($\theta^{(1)} = \theta^{(0)}$). 
+  
+* 提案分布$q(|\theta^{(1)})$から乱数$a^{(2)}$をdraw.   
+  ...
+* 提案分布$q(|\theta^{(t)})$から乱数$a^{(t+1)}$をdraw. 
+
+---
+
+一般的な条件付分布のMH法を離散で実践してみましょう.
+
+<例題>
+
+今度は詳細つり合い条件を満たす遷移核$A$がわからない状態で離散のMH法をやってみます. 
+
+```{r discrete MH}
+# Generating random number with transition matrix which satisfies detailed balance condition
+# 離散 MH
+
+set.seed(0)
+
+p = c(1/6, 1/2, 1/3) # 目的分布 (定常分布)
+# A <- matrix(c(0.3, 0.3, 0.4, 0.1, 0.5, 0.4, 0.2, 0.6, 0.2), nrow = 3, ncol = 3, byrow = TRUE) # 提案分布 (遷移核)
+
+Nsim <- 100000
+theta <- numeric(Nsim) # 離散だからthetaというよりxの値だけど. 
+accept <- 0
+
+# 提案分布: 簡単な一様分布 (ちなみに詳細つり合い条件は満たしていない)
+A <- matrix(c(1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3), nrow = 3, ncol = 3, byrow = TRUE)
+
+start_time <- Sys.time()
+
+# 初期値設定
+a_0 <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+             size = 1,
+             replace = TRUE,
+             prob = c(1/3, 1/3, 1/3) # 初期値は適当でいいよね?一様分布ではあるけど. 
+             )
+
+theta[1] <- a_0
+
+for (t in 2:Nsim) {
+  # cat("t = ")
+  # print(t)
+  # 1期前の値を基に提案分布P( |t-1)を特定し, 提案分布から乱数発生
+  if (theta[t-1] == 1) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[1, ]  # P( |紋) # 条件付提案分布: 一様分布
+                  )
+  } else if (theta[t-1] == 2) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[2, ]  # P( |縞) # 条件付提案分布: 一様分布
+                  )
+  } else {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[3, ]  # P( |玉) # 条件付提案分布: 一様分布
+                  )
+  }
+  # 提案分布の不等号判定
+  if ( (A[a_t, theta[t-1]] * p[theta[t-1]]) > (A[theta[t-1], a_t] * p[a_t]) ) { 
+    # 不等号 > のとき r で確率補正
+    r <- (A[theta[t-1], a_t] * p[a_t]) / (A[a_t, theta[t-1]] * p[theta[t-1]])
+    # cat("r = ")
+    # print(r)
+    if (runif(1) < r) {
+      # rの確率でaを受容
+      # cat("a_t = ")
+      # print(a_t)
+      # cat("を確率 r で受容")
+      # print("")
+      theta[t] <- a_t
+      accept <- accept + 1
+    } else {
+      # 1-rの確率でaを破棄
+      # cat("a_t = ")
+      # print(a_t)
+      # cat("を確率 1-r で棄却")
+      # print("")
+      theta[t] <- theta[t-1]
+    }
+  } else {
+    # 不等号 < のとき r'=1 で確率補正
+    # print("r' = 1")
+    # cat("a_t = ")
+    # print(a_t)
+    # cat("を受容")
+    # print("")
+    theta[t] <- a_t
+    accept <- accept + 1
+  }
+}
+
+acceptance_rate <- accept / Nsim
+print("acceptance rate")
+acceptance_rate
+
+end_time <- Sys.time()
+print("Run Time")
+end_time - start_time
+
+# simulated stationary distribution
+# 完璧な提案分布に従う乱数を発生させたら, 目的分布に従う乱数となる. p(|)もp()も一緒だしな. 
+p_sim <- c((theta==1) %>% mean(), (theta==2) %>% mean(), (theta==3) %>% mean())
+p_sim
+
+# true stational distribution
+p
+
+# trace plot
+trplot_len <- 100
+
+df <- data.frame(theta)
+df["t"] <- df %>% rownames()
+plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta, xlab = "t", ylab = "θ^(t)")
+par(new=T)
+plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta, xlab = "t", ylab = "θ^(t)", type = "S")
+
+plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta, xlab = "t", ylab = "θ^(t)")
+par(new=T)
+plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta, xlab = "t", ylab = "θ^(t)", type = "S")
+
+
+# plot distribution
+barplot(rbind(p_sim, p), beside = TRUE, names.arg = c("紋", "縞", "玉"), ylim = c(0, 1), legend = TRUE)
+```
+
+```{r discrete MH simplified, include=FALSE}
+# Generating random number with transition matrix which satisfies detailed balance condition
+# 離散 MH
+set.seed(0)
+
+p = c(1/6, 1/2, 1/3) # 目的分布 (定常分布)
+# A <- matrix(c(0.3, 0.3, 0.4, 0.1, 0.5, 0.4, 0.2, 0.6, 0.2), nrow = 3, ncol = 3, byrow = TRUE) # 提案分布 (遷移核)
+
+Nsim <- 100000
+theta <- numeric(Nsim)
+accept <- 0
+
+# 提案分布: 簡単な一様分布 (ちなみに詳細つり合い条件は満たしていない)
+A <- matrix(c(1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3, 1/3), nrow = 3, ncol = 3, byrow = TRUE)
+
+start_time <- Sys.time()
+
+# 初期値設定
+a_0 <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+             size = 1,
+             replace = TRUE,
+             prob = c(1/3, 1/3, 1/3) # 初期値は適当でいいよね?一様分布ではあるけど. 
+             )
+
+theta[1] <- a_0
+
+for (t in 2:Nsim) {
+  # cat("t = ")
+  # print(t)
+  # 1期前の値を基に提案分布P( |t-1)を特定し, 提案分布から乱数発生
+  if (theta[t-1] == 1) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[1, ]  # P( |紋) # 条件付提案分布: 一様分布
+                  )
+  } else if (theta[t-1] == 2) {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[2, ]  # P( |縞) # 条件付提案分布: 一様分布
+                  )
+  } else {
+    a_t <- sample(x = c(1, 2, 3), # 1: 紋, 2: 縞, 3: 玉
+                  size = 1,
+                  replace = TRUE,
+                  prob = A[3, ]  # P( |玉) # 条件付提案分布: 一様分布
+                  )
+  }
+  # 補正確率 r の計算
+  r <- (A[theta[t-1], a_t] * p[a_t]) / (A[a_t, theta[t-1]] * p[theta[t-1]])
+  if (runif(1) < r) { 
+    # 本当はmin(1, r)だけど, 1 > rのとき (runif(1) < r) == TRUEだから
+    # わざわざr'の部分は書かなくてもいい(理論上は補正確率が1以上でおかしいけど)
+     theta[t] <- a_t
+     accept <- accept + 1
+  } else {
+     theta[t] <- theta[t-1]
+  }
+}
+
+acceptance_rate <- accept / Nsim
+print("acceptance rate")
+acceptance_rate
+
+end_time <- Sys.time()
+print("Run Time")
+# 簡略化アルゴリズムが遅いのは, 不等号<のときでも無駄にr(>1)を計算しているからかも?
+# rを変数定義しなければ早いかも(--> それでも遅い)
+print(end_time - start_time)
+
+# simulated stationary distribution
+# 完璧な提案分布に従う乱数を発生させたら, 目的分布に従う乱数となる. p(|)もp()も一緒だしな. 
+p_sim <- c((theta==1) %>% mean(), (theta==2) %>% mean(), (theta==3) %>% mean())
+p_sim
+
+# true stational distribution
+p
+
+# trace plot
+trplot_len <- 100
+
+df <- data.frame(theta)
+df["t"] <- df %>% rownames()
+plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta, xlab = "t", ylab = "θ^(t)")
+par(new=T)
+plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta, xlab = "t", ylab = "θ^(t)", type = "S")
+
+plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta, xlab = "t", ylab = "θ^(t)")
+par(new=T)
+plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta, xlab = "t", ylab = "θ^(t)", type = "S")
+
+
+# plot distribution
+barplot(rbind(p_sim, p), beside = TRUE, names.arg = c("紋", "縞", "玉"), ylim = c(0, 1), legend = TRUE)
+```
+
+ここまでは一般的にMH法を紹介しましたが, 私たちはそもそも事後分布$f(\theta|D)$に従うパラメータの乱数が欲しかったことを思い出してください. MHアルゴリズムの目的分布(定常分布)$f(\cdot)$に事後分布$f(\theta|D)$を代入します. すると補正確率$r$が, 
+
+$$\begin{eqnarray}
+r &=& \frac{q(\theta^{(t)}|a^{(t+1)})f(a^{(t+1)})} {q(a^{(t+1)}|\theta^{(t)})f(\theta^{(t)})} \\
+&=& \frac{q(\theta^{(t)}|a^{(t+1)})f(a^{(t+1)}|D)} {q(a^{(t+1)}|\theta^{(t)})f(\theta^{(t)}|D)} \\
+&=& \frac{q(\theta^{(t)}|a^{(t+1)}) \frac{f(D|a^{(t+1)})f(a^{(t+1)})}{f(D)}}
+{q(a^{(t+1)}|\theta^{(t)}) \frac{f(D|\theta^{(t)})f(\theta^{(t)})}{f(D)}} \\
+&=& \frac{q(\theta^{(t)}|a^{(t+1)}) f(D|a^{(t+1)})f(a^{(t+1)})}
+{q(a^{(t+1)}|\theta^{(t)}) f(D|\theta^{(t)})f(\theta^{(t)})} \\
+\end{eqnarray}$$
+
+となり, 事後分布の正規化定数$f(D)$が約分で消え, 事後分布のカーネルだけが残ります. カーネルはパラメータを代入すればすぐに求まり$r$は簡単に計算できるため, ベイズとMH法は非常に相性がいいと言えます. 
+
+## 独立メトロポリス・ヘイスティングス法 (Independence Metropolis-Hastings: IMH)
+
+一般的な提案分布は1時点前の乱数に依存した条件付き分布$q(|\theta^{(0)})$でした. ここではMH法の特殊ケースとしてよりシンプルに, 提案分布が1時点前の条件付でない無条件分布を使います. そうすると各ステップでdrawされる乱数の候補が互いに独立になります. このMH法を特に独立MH法といいます. 
+
+<例題>
+
+ポアソン分布のパラメータ(期待値)を推定します. ポアソン分布の尤度にガンマ分布の事前分布をかけて事後分布が$f(\theta|\alpha=11,\lambda=13)$のガンマ分布となりました. これに従う乱数をIMHで発生してみましょう.   
+(ガンマ分布なら期待値と分散は解析的に求まっているのでわざわざMH法使わなくてもいけるのですが教材としてやってみます)
+
+目的分布である事後カーネルは, 
+
+$$
+f(\theta) = e^{-13\theta}\theta^{10}
+$$
+
+提案分布$q(\theta)$は何でもいいですが, 簡単な正規分布${\rm Normal}(1, 0.5)$にしてみます. (実際ここの調整が難しいのですが)
+
+```{r IMH exercise}
+qme <- 1.0         #提案分布の期待値
+qsd <- sqrt(0.5)   #提案分布のＳＤ
+Nsi <- 10^5        #サンプルサイズ
+Bin <- 10^3        #バーンイン期間
+
+imh <- function(qme, qsd, Nsi, Bin) {
+  set.seed(1)
+  theta <- numeric(Nsi) # 採用した乱数のベクトル
+  theta[1] <- rnorm(1, mean=qme, sd=qsd) # 初期値(もちろん提案分布からサンプリング)
+  co <- 0 # カウント
+  
+  start_time <- Sys.time()
+  for (t in 2:Nsi){
+      a <- rnorm(1, mean=qme, sd=qsd) # 乱数候補の生成
+      r <- ((dnorm(theta[t-1], mean=qme, sd=qsd)*dgamma(a,shape=11,rate=13)) / 
+            (dnorm(a, mean=qme, sd=qsd)*dgamma(theta[t-1],shape=11,rate=13))) # 補正確率
+      if (runif(1) < r) { 
+         theta[t] <- a
+         co <- co + 1
+      } else {
+         theta[t] <- theta[t-1]
+      }
+  }
+  end_time <- Sys.time()
+  print("Run Time")
+  end_time - start_time
+
+  # MCMC結果
+  cat("採択率")
+  print(co/Nsi)
+  cat("モンテカルロ積分\n")
+  cat("Mean")
+  round(mean(theta[(Bin+1):Nsi]), 3) %>% print() # バーンイン期間切り捨て
+  cat("Var")
+  round(var( theta[(Bin+1):Nsi]), 3) %>% print()
+  cat("SD")
+  round(sd(  theta[(Bin+1):Nsi]), 3) %>% print()
+  
+  # トレースプロット
+  df <- data.frame(theta)
+  df["t"] <- df %>% rownames()
+  trplot_len <- 2000
+  
+  plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta,
+       type="l",ylim=c(0, 3),ylab='θ^(t)',xlab='t',lwd=0.5,
+       main="乱数θ^(t)のトレースプロット",sub="バーンイン期間1000")
+  plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta,
+       type="l",ylab='θ^(t)',xlab='t',lwd=0.5,ylim=c(0, 3),
+       main="乱数θ^(t)のトレースプロット",sub="バーンイン期間1000")
+  # par(mfrow=c(1,2))
+  # plot(theta,type="l",ylab='θ^(t)',xlab='t',lwd=0.5,main="乱数θ^(t)のトレースプロット",sub="バーンイン期間1000")
+  
+  
+  # 目的分布とサンプリング結果のプロット
+  hist(theta, breaks =50, xlab='', xlim=c(0,2.5), ylim=c(0,2.0), freq=F, 
+       main="事後分布(青線)とサンプリング結果(ヒストグラム)")
+  par(new=T)
+  curve(dgamma(x,shape=11,rate=13),0,2.5,ylab='',xlab='θ, θ^(t)',xlim=c(0,2.5),ylim=c(0,2.0),lwd=2.0,col="blue")
+}
+
+# 解析解
+cat("解析解\n")
+cat("Mean")
+round(11/13, 3) %>% print()
+cat("Var")
+round(11/13^2, 3) %>% print()
+cat("SD")
+round(sqrt(11/13^2), 3) %>% print()
+
+imh(qme, qsd, Nsi, Bin)
+```
+
+## IMH法の弱点
+
+上の例では提案分布を${\rm Normal}(1, 0.5)$としてみました. 結果的には良いMCMCサンプリングができと言えます. その理由は, 目的分布である事後分布${\rm Gamma}(\alpha=11, \lambda=13)$と結構重なっていたからです. 
+
+```{r posterior (target) and proposal distribution, echo=FALSE}
+curve(dgamma(x,11,13),-1,4,ylab='density',xlab='θ, θ^(t)',lwd=2.0,add=F, main="事後分布と提案分布", col="blue")
+curve(dnorm(x,1.0,sqrt(0.5)),-1,4,ylab='',xlab='',lwd=2.0,add=T)
+text(0.25,1.5,'G(11,13)',col="blue")
+text(0,0.4,'N(1,0.5)')
+```
+
+提案分布の期待値と分散を変えるとどうなるでしょう. 
+
+```{r posterior (target) and several proposal distribution, echo=FALSE}
+curve(dgamma(x,11,13),-1,4,ylab='density',xlab='θ, θ^(t)',lwd=2.0,add=F, main="事後分布といろいろな提案分布", col="blue")
+curve(dnorm(x,1.0,sqrt(0.5)),-1,4,ylab='',xlab='',lwd=2.0,add=T)
+curve(dnorm(x,3.0,sqrt(0.5)),-1,4,ylab='',xlab='',lwd=1.5,lty=2,add=T)
+curve(dnorm(x,1.0,sqrt(10)),-1,4,ylab='',xlab='',lwd=1.5,lty=2,add=T)
+curve(dnorm(x,2.0,sqrt(0.01)),-1,4,ylab='',xlab='',lwd=1.5,lty=2,add=T)
+text(0.25,1.5,'G(11,13)',col="blue")
+text(0,0.4,'N(1,0.5)')
+text(3,0.65,'N(3,0.5)')
+text(3,0.2,'N(1,10)')
+text(2.5,1.0,'N(2,0.01)')
+```
+
+例えば提案分布が${\rm Normal}(1, 2)$だと, $\theta$の範囲はうまくカバーできてるものの事後分布と重なっている面積が小さいため受容率が低く収束も遅くなります. ${\rm Normal}(3, 0.5)$や${\rm Normal}(2, 0.01)$はそもそも重なっている面積がほぼないので絶望的です. 
+
+```{r several proposal distribution, echo=FALSE}
+# 提案分布N(1, 10)
+print("proposal: N(1, 10)")
+qme <- 1.0         #提案分布の期待値
+qsd <- sqrt(10)   #提案分布のＳＤ
+Nsi <- 10^5        #サンプルサイズ
+Bin <- 10^3        #バーンイン期間
+imh(qme, qsd, Nsi, Bin)
+
+# 提案分布N(3, 0.5)
+print("proposal: N(3, 0.5)")
+qme <- 3.0        #提案分布の期待値
+qsd <- sqrt(0.5)   #提案分布のＳＤ
+Nsi <- 10^5        #サンプルサイズ
+Bin <- 10^3        #バーンイン期間
+imh(qme, qsd, Nsi, Bin)
+
+# 提案分布N(2, 0.01)
+print("proposal: N(2, 0.01)")
+qme <- 2.0         #提案分布の期待値
+qsd <- sqrt(0.01)   #提案分布のＳＤ
+Nsi <- 10^5        #サンプルサイズ
+Bin <- 10^3        #バーンイン期間
+imh(qme, qsd, Nsi, Bin)
+```
+
+仮に事後分布の位置や形がわかっていれば上手な提案分布を設定できるかもしれませんが, 実際の分析では事後分布の形を把握することが難しいので, 分析者がIMHの提案分布を設定するのは非常に困難です. そこでランダムウォークMHを導入します. 
+
+## ランダムウォーク メトロポリス・ヘイスティングス法 (Random Walk Metropolis-Hastings: RWMH)
+
+RWMHはパラメータの乱数候補$a^{(t)}$を各ステップで提案分布$q(|)$から逐一drawするのではなく, 
+
+$$
+  a^{(t)} = \theta^{(t-1)} + e \\
+  e \sim {\rm Normal}(0, \delta_e^2) \ {\rm or} \ {\rm Uniform}(-\delta_e', \delta_e')
+$$
+
+とします. $e$はノイズで, $E[e]=0$となるような左右対称な分布(平均0の正規分布や左右対称な一様分布)に従います. すると$a^{(t)}$は1ステップ前の乱数$\theta^{(t-1)}$と平均0のノイズ$e$だけで決まるランダムウォークになります. ランダムウォークに動くということは, 仮に1ステップ前の乱数$\theta^{(t-1)}$が"良い"乱数であれば, 次の乱数候補$a^{(t)}$もそう悪くない乱数になるということです(期待値は1ステップ前の乱数$E[a^{(t)}]=\theta^{(t-1)}$). これは当てずっぽうに毎ステップ同じ提案分布$q(\cdot)$から乱数候補をdrawするIMHよりも良さそうです. 
+
+RWMHの提案分布自体は正規分布や一様分布でなくても何でもいいですが, 対称な分布(正規分布ノイズのランダムウォークなら$\theta^{(t)} \sim N(E[\theta^{(t)}]=\theta^{(t-1)}, \delta_e^2), \theta^{(t-1)} \sim N(E[\theta^{(t-1)}]=\theta^{(t)}, \delta_e^2)$が成り立つので$Pr(\theta^{(t)} \rightarrow \theta^{(t-1)}), Pr(\theta^{(t-1)} \rightarrow \theta^{(t)})$)にすると便利です. 
+対称な提案分布にすると, 
+
+$$
+  q(a^{(t)}|\theta^{(t-1)}) = q(\theta^{(t-1)}|a^{(t)})
+$$
+
+となります. よってRWMHの補正確率$r$は
+
+$$\begin{eqnarray}
+  r &=& \frac{q(\theta^{(t-1)}|a^{(t)})f(a^{(t)})} {q(a^{(t)}|\theta^{(t-1)})f(\theta^{(t-1)})} \\
+    &=& \frac{f(a^{(t)})} {f(\theta^{(t-1)})}
+\end{eqnarray}$$
+
+となり, 補正確率$r$から提案分布$q(|)$が消えて事後分布の比だけになります. あとはいつものMH法のようにサンプリングします. 
+
+<例題>
+
+先のIMHの例題をRWMHでやってみます. 初期値は$\theta^{(1)}=3$としてわざと遠くにしてみます. ノイズ$e$の分散は$\delta_e^2=0.1$とします(実際これは分析者が調節します). 
+
+```{r RMH exercise}
+qsd <- sqrt(0.1)   #提案分布のＳＤ
+Nsi <- 10^5+100    #サンプルサイズ
+Bin <- 10^2        #バーンイン期間
+
+rwmh <- function(qme, qsd, Nsi, Bin) {
+  set.seed(1)
+  theta <- numeric(Nsi) # 採用した乱数のベクトル
+  theta[1] <- 3 # 初期値: でたらめでオッケー
+  co <- 0 # カウント
+  
+  start_time <- Sys.time()
+  for (t in 2:Nsi){
+      a <- rnorm(1, mean=theta[t-1], sd=qsd) # 乱数候補をランダムウォークで生成
+      r <- (dgamma(a,shape=11,rate=13) / 
+            dgamma(theta[t-1],shape=11,rate=13)) # 補正確率: 提案分布は消える
+      if (runif(1) < r) { 
+         theta[t] <- a
+         co <- co + 1
+      } else {
+         theta[t] <- theta[t-1]
+      }
+  }
+  end_time <- Sys.time()
+  print("Run Time")
+  end_time - start_time
+
+  # MCMC結果
+  cat("採択率")
+  print(co/Nsi)
+  cat("モンテカルロ積分\n")
+  cat("Mean")
+  round(mean(theta[(Bin+1):Nsi]), 3) %>% print() # バーンイン期間切り捨て
+  cat("Var")
+  round(var( theta[(Bin+1):Nsi]), 3) %>% print()
+  cat("SD")
+  round(sd(  theta[(Bin+1):Nsi]), 3) %>% print()
+  
+  # トレースプロット
+  df <- data.frame(theta)
+  df["t"] <- df %>% rownames()
+  trplot_len <- 2000
+  
+  plot(df[1:trplot_len, ]$t, df[1:trplot_len, ]$theta,
+       type="l",ylim=c(0, 3),ylab='θ^(t)',xlab='t',lwd=0.5,
+       main="乱数θ^(t)のトレースプロット",sub="バーンイン期間100")
+  plot(df[(nrow(df)-trplot_len):nrow(df), ]$t, df[(nrow(df)-trplot_len):nrow(df), ]$theta,
+       type="l",ylab='θ^(t)',xlab='t',lwd=0.5,ylim=c(0, 3),
+       main="乱数θ^(t)のトレースプロット",sub="バーンイン期間100")
+  # par(mfrow=c(1,3))
+  plot(df[1:100, ]$t, df[1:100, ]$theta,
+       type="l",ylim=c(0, 3),ylab='θ^(t)',xlab='t',lwd=0.5,
+       main="乱数θ^(t)のトレースプロット",sub="バーンイン期間100")
+  # plot(theta,type="l",ylab='θ^(t)',xlab='t',lwd=0.5,main="乱数θ^(t)のトレースプロット",sub="バーンイン期間1000")
+  
+  
+  # 目的分布とサンプリング結果のプロット
+  hist(theta, breaks =50, xlab='', xlim=c(0,2.5), ylim=c(0,2.0), freq=F, 
+       main="事後分布(青線)とサンプリング結果(ヒストグラム)")
+  par(new=T)
+  curve(dgamma(x,shape=11,rate=13),0,2.5,ylab='',xlab='θ, θ^(t)',xlim=c(0,2.5),ylim=c(0,2.0),lwd=2.0,col="blue")
+}
+
+# 解析解
+cat("解析解\n")
+cat("Mean")
+round(11/13, 3) %>% print()
+cat("Var")
+round(11/13^2, 3) %>% print()
+cat("SD")
+round(sqrt(11/13^2), 3) %>% print()
+
+rwmh(qme, qsd, Nsi, Bin)
+```
+
+初期値がでたらめでも, IMHよりきれいに事後分布に重なったサンプリングができています($\delta_e$をうまく設定できればの話ですが). 
+
+<遷移核, 遷移行列, "対称な"条件付きjoint probabilityについて>
+
+* 遷移核はあくまでも条件付確率(密度), 写像, Mapping, 関数(座標空間は考えない方がいい)
+* 2変量同時分布$f(\theta^{(t)}, \theta^{(t-1)})$はただの結果
+
+## RWMH法の弱点
+
+RWMHの成功のカギは$\delta_e$をうまく設定できるかどうかです. $\delta_e$が大きすぎると, 1回ランダムウォークの移動距離が長く, 目標分布の確率密度が高い領域になかなか入れずに受容率が下がってしまいます. 反対に$\delta_e$が小さすぎると, 1回ランダムウォークの移動距離が短く, 収束まで時間がかかってしまいます(乱数同士が相関). $\delta_e$はハイパーパラメータなので分析者が地道にちょうどいい値を探すしかありません. 
+
+```{r miss specified delta_e}
+# delta_e = 100000
+qsd <- sqrt(100000)   #提案分布のＳＤ
+Nsi <- 10^5+100    #サンプルサイズ
+Bin <- 10^2        #バーンイン期間
+rwmh(qme, qsd, Nsi, Bin)
+
+# delta_e = 0.00001
+qsd <- sqrt(0.00001)   #提案分布のＳＤ
+Nsi <- 10^5+100    #サンプルサイズ
+Bin <- 10^2        #バーンイン期間
+rwmh(qme, qsd, Nsi, Bin)
+```
+
+
+先の例題ではポアソン分布のパラメータ1つだけの推定でしたが, 回帰モデルを推定する際, 回帰モデルには複数推定するパラメータがあります. なのでRWMHはその分だけノイズの分散$\delta_{e1}, \delta_{e2}, ..., \delta_{ek}$を設定し, 別々に乱数をサンプリングしなければなりません. こうなるとハイパーパラメータの設定はさらに難しくなります. 
+
+$$\begin{eqnarray}
+  回帰モデル \\
+  y &=& \beta_0 + \beta_1 X_1+ \beta_2 X_2 + \cdots + \beta_k X_k + u, \ u \sim N(0, \sigma^2) \\
+  \iff y|_{{\bf X}, \beta_1, \beta_2, \cdots, \beta_k, \sigma} &\sim& N(\beta_0 + \beta_1 X_1+ \beta_2 X_2 + \cdots + \beta_k X_k, \sigma^2) \\
+  乱数候補のランダムウォーク \\
+  \left(
+      \begin{array}{c}
+        a_{\beta_0}^{(t)} \\
+        a_{\beta_1}^{(t)} \\
+        \vdots \\
+        a_{\beta_k}^{(t)} \\
+        a_{\sigma}^{(t)} \\
+      \end{array}
+  \right) &=&
+  \left(
+      \begin{array}{c}
+        \beta_0^{(t-1)} \\
+        \beta_1^{(t-1)} \\
+        \vdots \\
+        \beta_k^{(t-1)} \\
+        \sigma^{(t-1)} \\
+      \end{array}
+  \right) + 
+  \left(
+      \begin{array}{c}
+        e_{\beta_0} \\
+        e_{\beta_1} \\
+        \vdots \\
+        e_{\beta_k} \\
+        e_{\sigma} \\
+      \end{array}
+  \right) \\
+  \left(
+      \begin{array}{c}
+        e_{\beta_0} \\
+        e_{\beta_1} \\
+        \vdots \\
+        e_{\beta_k} \\
+        e_{\sigma} \\
+      \end{array}
+  \right) &\sim& N \left(
+      \begin{array}{c}
+        0, \delta_{e\beta_0}^2 \\
+        0, \delta_{e\beta_1}^2 \\
+        \vdots \\
+        0, \delta_{e\beta_k}^2 \\
+        0, \delta_{e\sigma}^2 \\
+      \end{array}
+  \right)
+\end{eqnarray}$$
+
+```{r regression MH hyperparam setting}
+
+```
+
+参考:  
+豊田秀樹 編著 (2015)「基礎からのベイズ統計学・ハミルトニアンモンテカルロ法による実践的入門」朝倉書店  
+Christopher M. Bishop (2006) "Pattern Recognition and Machine Learning" Springer
