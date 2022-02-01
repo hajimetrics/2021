@@ -1,0 +1,386 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  pdftitle={Gibbs Sampler},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+
+\title{Gibbs Sampler}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{中妻照雄「Pythonによるベイズ統計学入門」第4,6章}
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\hypertarget{ux30deux30ebux30b3ux30d5ux9023ux9396ux30e2ux30f3ux30c6ux30abux30ebux30edux6cd5mcmc-ux306eux539fux7406ux5fa9ux7fd2ux542bux3080}{%
+\subsection{\texorpdfstring{\textbf{1. マルコフ連鎖モンテカルロ法(MCMC)
+の原理（復習含む）}}{1. マルコフ連鎖モンテカルロ法(MCMC) の原理（復習含む）}}\label{ux30deux30ebux30b3ux30d5ux9023ux9396ux30e2ux30f3ux30c6ux30abux30ebux30edux6cd5mcmc-ux306eux539fux7406ux5fa9ux7fd2ux542bux3080}}
+
+事後分布を得たいですが、積分計算が複雑で事後分布 (の基本統計量)
+を解析的に得ることは難しいです。
+
+→　パラメータの事後分布から乱数を発生させて近似することを考えます。
+
+このような乱数生成に「マルコフ連鎖」を用います。
+
+\hypertarget{ux30deux30ebux30b3ux30d5ux9023ux9396ux3068ux306f}{%
+\subsubsection{\texorpdfstring{\textbf{マルコフ連鎖とは}}{マルコフ連鎖とは}}\label{ux30deux30ebux30b3ux30d5ux9023ux9396ux3068ux306f}}
+
+確率変数の系列 \(X_0,X_1, ... , X_\infty\) を考えます。
+
+マルコフ連鎖においては、時点 \(t\) における確率変数 \(X_t\)
+の条件付き確率分布は \[
+\begin{eqnarray}
+f_t(\,x_t\,|\,x_0,x_1,...,x_{t-1}\,) = f(\,x_t\,|\,x_{t-1}\,)
+\end{eqnarray}
+\] と表現され、時点 \(t-1\) における 確率変数の実現値 \(x_{t-1}\)
+のみに依存します （マルコフ性）。
+
+また、「斉時性」を満たすマルコフ連鎖では、\(f(\,x_t\,|\,x_{t-1}\,)\)
+は時間を通じて一定です。
+
+この \(f(\,x_t\,|\,x_{t-1}\,)\) を遷移核と呼びます。  (
+\(K(\,x_{t-1},x_t\,)\) と表記します）
+
+(例: 醤油のシェアの遷移)
+
+状態推移行列を \[
+A =
+\begin{pmatrix}
+0.6 & 0.2 & 0.2 \\
+0.1 & 0.8 & 0.1\\
+0.2 & 0.3 & 0.5
+\end{pmatrix}
+\] としたとき、常に
+
+\[
+\begin{pmatrix}
+x^{(1)}_t \\
+x^{(2)}_t \\
+x^{(3)}_t
+\end{pmatrix}^T
+= A \cdot
+\begin{pmatrix}
+x^{(1)}_{t-1} \\
+x^{(2)}_{t-1} \\
+x^{(3)}_{t-1}
+\end{pmatrix}^T
+\] となり、
+
+\[
+\begin{eqnarray}
+f_t(\,x_t\,|\,x_0,x_1,...,x_{t-1}\,) &=& f(\,x_t\,|\,x_{t-1}\,)\\
+&=& K(\,x_t,x_{t-1}\,)
+\end{eqnarray}
+\] が成り立つ。
+
+(例: 終わり)
+
+同時確率密度関数は \[
+\begin{eqnarray}
+f(\,x_0,x_1,...,x_t\,) &=& f_0(\,x_0\,)  \times f_1(\,x_1\,|\,x_0\,) \times f_2(\,x_2\,|\,x_0\,,\,x_1\,)\\
+&& ... \times f_t(\,x_2\,|\,x_0\,,\,x_1\,,...,)\\\\
+&=&  f_0(\,x_0\,) \prod_{s=1}^{t}  K(\,x_s,x_{s-1}\,)
+\end{eqnarray}
+\]
+
+依って、周辺確率分布は \[
+\begin{eqnarray}
+f(\,x_t\,) &=&  f_0(\,x_0\,) \int_{X}\int_{X} \cdot\cdot\cdot \int_{X} \,\prod_{s=1}^{t}  K(\,x_s,x_{s-1}\,)\, dx_1dx_2...dx_{t-1}\\
+\\
+&=& f_0 \circ  K^t
+\end{eqnarray}
+\]
+
+と書けます。　 （ここで、\(K^2=\int_{X}K(\,x_t,x_{t-1}\,)\cdot K(\,x_{t-1},x_{t-2}\,)\,dx_{t-1}\)）
+
+（積分は \(x_{t-2}\) から \(x_{t}\) までの遷移確率を考えるとき、途中経路
+\(x_{t-1}\) を区別せず全ての経路を合計した確率という解釈でよい）
+
+したがって、\(f(\,x_t\,)\) は初期状態 \(f_0\) と遷移核
+\(K=f(\,k_s\,|\,x_{s-1}\,)\) のみに依存します。
+
+\hypertarget{ux30deux30ebux30b3ux30d5ux9023ux9396ux306eux5b9aux5e38ux5206ux5e03ux4e0dux5909ux5206ux5e03-invariant-distribution}{%
+\subsubsection{\texorpdfstring{\textbf{マルコフ連鎖の定常分布(不変分布;
+invariant
+distribution)}}{マルコフ連鎖の定常分布(不変分布; invariant distribution)}}\label{ux30deux30ebux30b3ux30d5ux9023ux9396ux306eux5b9aux5e38ux5206ux5e03ux4e0dux5909ux5206ux5e03-invariant-distribution}}
+
+\[
+\begin{eqnarray}
+\bar{f}(\,x_t\,) &=&  \int_X \bar{f}(\,x_{t-1}\,) K(\,x_t,x_{t-1}\,)\, dx_{t-1}\\
+\\
+\bar{f} &=& \bar{f} \circ  K
+\end{eqnarray}
+\]
+
+を満たす \(\bar{f}\) をマルコフ連鎖の定常分布・不変分布といいます。
+
+(より一般的に,
+\(\bar{f}(\tilde{x}) = \int_X \bar{f}(\,x\,) \,K(\,x,\tilde{x}\,)\, dx\))
+
+つまり、遷移しても各値・状態の確率が変化しない、そんな分布です。
+
+\(\bar{f}\)に関して、 \[
+\begin{eqnarray}
+\bar{f} &=& \bar{f} \circ  K^t
+\end{eqnarray}
+\]
+
+が成り立ちます。
+
+定常分布\(\bar{f}\)の重要な十分条件として「詳細釣合条件 (detailed
+balance)」があります。
+
+任意の\(\tilde{x},x\,\in X\) に関して、 \[
+\begin{eqnarray}
+\bar{f}(\,x\,) K(\,\tilde{x}\,,\,x\,)&=&\bar{f}(\,\tilde{x}\,) K(\,\tilde{x}\,,\,x\,)
+\end{eqnarray}
+\]
+
+つまり任意の2点（状態）の間で、流入量（確率）と流出量（確率）が一致するということです。
+
+この条件が成り立つとき、必ず \(\bar{f}(\,x\,)\) は定常分布になります。
+
+\hypertarget{mcmcux306bux304aux3051ux308bux30deux30ebux30b3ux30d5ux9023ux9396}{%
+\subsubsection{\texorpdfstring{\textbf{MCMCにおけるマルコフ連鎖}}{MCMCにおけるマルコフ連鎖}}\label{mcmcux306bux304aux3051ux308bux30deux30ebux30b3ux30d5ux9023ux9396}}
+
+「欲しい事後分布」が定常分布となるようなマルコフ連鎖（遷移核）を作成します。
+
+\hypertarget{mcmcux3067ux7528ux3044ux308bux30deux30ebux30b3ux30d5ux9023ux9396ux306bux6e80ux305fux3057ux3066ux307bux3057ux3044ux6027ux8cea}{%
+\paragraph{\texorpdfstring{\textbf{MCMCで用いるマルコフ連鎖に満たしてほしい「性質」}}{MCMCで用いるマルコフ連鎖に満たしてほしい「性質」}}\label{mcmcux3067ux7528ux3044ux308bux30deux30ebux30b3ux30d5ux9023ux9396ux306bux6e80ux305fux3057ux3066ux307bux3057ux3044ux6027ux8cea}}
+
+\textbf{①定常分布が一意に定まるマルコフ連鎖であってほしい}
+
+全ての状態が再帰的である（一度その状態を出てもいつか戻ってこられる)
+
+\(\iff\)
+
+既約な（任意の状態から任意の状態へ行き来できる）マルコフ連鎖に関して、定常分布が一意に定まる
+
+（そもそも既約でない場合も定常分布はただ一つに定まらない）
+
+\textbf{②初期状態（値）に関係なく、定常分布に収束してほしい}
+
+マルコフ連鎖が「エルゴード性(ergodicity)」を持つ
+(既約かつ周期を持たない)
+
+\(\Rightarrow\)
+
+定常分布が一意に存在し初期状態に関係なく \(t \rightarrow \infty\) で収束
+(これを均衡分布という)
+
+さらに任意の状態から任意の状態への推移確率が正であれば、エルゴード性は満たされる
+（1回の遷移でどこでも行ける可能性あり;十分条件）
+
+（この辺の内容は主に以下の資料を参考にしました）
+
+Bishop(2006) PRML（機械学習の黄色い本）第11章「Sampling Method」
+\href{https://ja.wikipedia.org/wiki/\%E3\%83\%9E\%E3\%83\%AB\%E3\%82\%B3\%E3\%83\%95\%E9\%80\%A3\%E9\%8E\%96}{wikipedia
+「マルコフ連鎖」}
+\href{https://www.google.com/url?sa=t\&rct=j\&q=\&esrc=s\&source=web\&cd=\&ved=2ahUKEwjP4u-ErerwAhUBa94KHRyYAb4QFjAAegQIBBAD\&url=http\%3A\%2F\%2Fwww.ocw.titech.ac.jp\%2Findex.php\%3Fmodule\%3DGeneral\%26action\%3DDownLoad\%26file\%3D201602394-2401-0-1.pdf\%26type\%3Dcal\%26JWC\%3D201602394\&usg=AOvVaw2Irv_Guj_ICJi9pAJfVfnj}{東工大
+「マルコフ解析」マルコフ過程入門}
+
+まとめると、吸収状態や周期性などがなく、自由に行き来ができるマルコフ連鎖なら大体OKです。
+
+\hypertarget{ux30deux30ebux30b3ux30d5ux9023ux9396ux304bux3089ux306eux4e71ux6570ux751fux6210ux306eux624bux7d9aux304d}{%
+\paragraph{\texorpdfstring{\textbf{マルコフ連鎖からの乱数生成の手続き}}{マルコフ連鎖からの乱数生成の手続き}}\label{ux30deux30ebux30b3ux30d5ux9023ux9396ux304bux3089ux306eux4e71ux6570ux751fux6210ux306eux624bux7d9aux304d}}
+
+次に、実際にマルコフ連鎖からどのように乱数を生成するかについてです。
+
+前提条件：
+
+① \(f_0\) から乱数生成可能 ② \(K(\,x_{t-1},x_t\,)\)　から乱数生成可能 ③
+\(K(\,x_{t-1},x_t\,)\)　がエルゴード性を満たす
+
+\begin{itemize}
+\tightlist
+\item
+  \emph{step1 : t = 1 にセット, \(f_0(x_0)\) から乱数発生( \(x_0\) )}
+\item
+  \emph{step2 : \(K(x_{t-1},x_t)\) から乱数発生( \(x_t\) )}
+\item
+  \emph{step3 : t を 1 増やし、Step2に戻る} 
+\end{itemize}
+
+マルコフ連鎖が均衡分布に収束したと考えられるほど \(t\)
+が大きくなった後の \(x_t\) の系列は目標分布(事後分布)
+から生成された乱数とみなすことができます。
+
+\(\rightarrow\) では、どうやって事後分布 \(f(\theta)\)
+を均衡分布に持つマルコフ連鎖　\(K(\,\theta^{(t-1)},\theta^{(t)}\,)\)
+を作るか。
+
+今回はGibbs Samplerを紹介します。
+
+\hypertarget{ux30aeux30d6ux30b9ux30b5ux30f3ux30d7ux30e9ux30fcux30b5ux30f3ux30d7ux30eaux30f3ux30b0}{%
+\subsection{\texorpdfstring{\textbf{2.
+ギブス・サンプラー（サンプリング）}}{2. ギブス・サンプラー（サンプリング）}}\label{ux30aeux30d6ux30b9ux30b5ux30f3ux30d7ux30e9ux30fcux30b5ux30f3ux30d7ux30eaux30f3ux30b0}}
+
+多変数の乱数を得るためのサンプリング法。今回は単純化のため、2変数
+\((\theta_1,\theta_2)\) で考えます
+
+想定する状況は、2変数の同時確率分布 \(f(\theta_1,\theta_2)\)
+があるが、この分布から同時に2変数の 乱数を得ることができない状況。
+
+ベイズ推定の文脈で言えば、推定したいパラメータが複数あり、それらの事後同時確率密度関数の数式に積分が入っており、複雑で、
+解析的な評価もできず、乱数もその分布から直接得ることができないという状況で使われます。（極めてよくありそうです。）
+
+一方で、条件付き確率分布　\(f(\theta_1|\theta_2)\) ,
+\(f(\theta_2|\theta_1)\) は分かっており（＝解析的に評価可能）、さらに、
+ここからは乱数を得られる状況、乱数生成器が存在する状況です。つまり、どちらか片方の変数の値があれば、もう片方の変数の
+乱数を容易に得ることができるような状況です。
+
+ベイズ
+
+この時、以下の手続きを行うことで2変数 \((\theta_1,\theta_2)\)
+の乱数を得ることができます。
+
+\begin{itemize}
+\tightlist
+\item
+  \emph{step1 : t = 1 にセット, \(\theta_2\) の適当な初期値を生成(
+  \(\theta_2^{(0)}\) )}
+\item
+  \emph{step2 : \(\theta_2^{(t-1)}\) を使って
+  \(f(\theta_1|\theta_2^{(t-1)})\) により \(\theta_1\) の乱数}
+  \emph{を生成(\(\theta_1^{(t)}\))}
+\item
+  \emph{step3 : \(\theta_1^{(t)}\) を使って
+  \(f(\theta_2|\theta_1^{(t)})\) により \(\theta_2\) の乱数}
+  \emph{を生成(\(\theta_2^{(t)}\))}
+\item
+  \emph{step4 : t を 1 増やし、Step2に戻る}
+\end{itemize}
+
+このギブス・サンプラーの遷移核は \[
+K(\,\boldsymbol{\theta}^{(t-1)},\boldsymbol{\theta}^{(t)}\,) =
+f(\theta_2^{(t)}|\theta_1^{(t)}) \cdot f(\theta_1^{(t)}|\theta_2^{(t-1)})
+\]
+
+この遷移核の定常分布が求めたい
+\(f(\theta_1^{(t)},\theta_2^{(t)}) = f(\boldsymbol{\theta}^{(t)})\)
+であることを確認します。
+
+定常分布の定義は、\(\bar{f}(\tilde{x}) = \int_X \bar{f}(\,x\,) \,K(\,x,\tilde{x}\,)\, dx\)
+
+今回の場合だと、(右辺)は \[
+\begin{eqnarray}
+\int_\boldsymbol{\theta} f(\boldsymbol{\theta}^{(t-1)}) \,K(\,\boldsymbol{\theta}^{(t-1)},\boldsymbol{\theta}^{(t)}\,)\, d\boldsymbol{\theta}^{(t-1)}
+&=& \int_{\theta_1} \int_{\theta_2} f(\theta_1^{(t-1)},\theta_2^{(t-1)}) \,\cdot f(\theta_2^{(t)}|\theta_1^{(t)}) \cdot f(\theta_1^{(t)}|\theta_2^{(t-1)}) d{\theta_1^{(t-1)}}d{\theta_2^{(t-1)}}\\
+\\
+&=& f(\theta_2^{(t)}|\theta_1^{(t)}) \int_{\theta_1} \int_{\theta_2} f(\theta_1^{(t-1)},\theta_2^{(t-1)}) \cdot f(\theta_1^{(t)}|\theta_2^{(t-1)}) d\theta_1^{(t-1)} d\theta_2^{(t-1)}\\
+\\
+&=& f(\theta_2^{(t)}|\theta_1^{(t)}) \int_{\theta_2} f(\theta_1^{(t)}|\theta_2^{(t-1)}) \left[\int_{\theta_1} f(\theta_1^{(t-1)},\theta_2^{(t-1)}) d\theta_1^{(t-1)}\right] d\theta_2^{(t-1)}\\
+\\
+&=& f(\theta_2^{(t)}|\theta_1^{(t)}) \int_{\theta_2} f(\theta_1^{(t)}|\theta_2^{(t-1)}) f(\theta_2^{(t-1)}) \,d\theta_2^{(t-1)}\\
+\\
+&=& f(\theta_2^{(t)}|\theta_1^{(t)}) \int_{\theta_2} f(\theta_1^{(t)},\theta_2^{(t-1)}) \,d\theta_2^{(t-1)}\\
+\\
+&=& f(\theta_2^{(t)}|\theta_1^{(t)}) f(\theta_1^{(t)})\\
+\\
+&=& f(\theta_2^{(t)},\theta_1^{(t)})\\
+\\
+&=& f(\boldsymbol{\theta}^{(t)})
+\end{eqnarray}
+\]
+
+となり、\(f(\boldsymbol{\theta}^{(t)})\)
+と一致。したがって求めたい目標分布が定常分布となっています。
+
+さらに
+
+では、いったいどういう状況でこれを使うことができるのでしょうか？
+
+回帰モデル
+
+\[
+Y_i = \alpha^{true} + \beta^{true} X_i + \epsilon_i \quad,\quad \epsilon_i \sim Normal\,(0,{\sigma^{true}}^2)
+\] を考えます。
+
+同時事前分布は、多変量正規分布と逆ガンマ分布を用います。
+
+\[ 
+\begin{eqnarray}
+\alpha,\beta\,|\,\sigma^2 &\sim& \boldsymbol{Normal_2} \left(
+\begin{pmatrix}
+\alpha_0 \\\beta_0 \\\end{pmatrix}_,\, 
+\begin{pmatrix}
+s_{\alpha}^2 & 0 \\0 & s_{\beta}^2 \\
+\end{pmatrix}
+\right)\\\\
+\sigma^2&\sim& InverseGamma \left( \,\frac{v_0}{2},\frac{\lambda_0}{2} \right)
+\end{eqnarray}
+\]
+
+自然共役事前分布との違いは、\(\alpha, \beta\)
+の分散パラメータが、\(\sigma^2\) には依存していない点です。それ以外は
+全て一緒です。
+
+したがって、こちらの方が過程が緩く、より柔軟な事前分布であるとされているようです。
+
+\end{document}
