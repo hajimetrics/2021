@@ -1,6 +1,6 @@
 ---
 title: "メトロポリス・ヘイスティングス法"
-author: "Sihan Wang"
+author: ""
 date: "5/8/2021"
 output:
   html_document: default

@@ -1,6 +1,6 @@
 ---
 title: "Bayesian Statistics from Scratch"
-author: "Sihan Wang"
+author: ""
 date: "2021/4/30"
 output:
   html_document:
@@ -14,8 +14,7 @@ output:
 
 * [1.ベイズ統計学(復習)](#anchor1)
   * ベイズ統計モデリング
-  * 事後分布のカーネル
-* [2.MCMC](#anchor2)
+  * 事後分布のカーネル* [2.MCMC](#anchor2)
   * モンテカルロ法
   * マルコフ連鎖
   * メトロポリス・ヘイスティングス法(MH法)

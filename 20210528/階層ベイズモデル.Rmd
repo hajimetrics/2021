@@ -1,6 +1,6 @@
 ---
 title: "階層ベイズモデル"
-author: "LI CHUNJIANG"
+author: ""
 date: "2021/5/21"
 output:
   html_document: default
